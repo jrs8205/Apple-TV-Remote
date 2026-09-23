@@ -21,6 +21,16 @@ object WakeOnLan {
         return first and 0x02 != 0
     }
 
+    /** Accepts one or more MAC addresses separated by commas or spaces; null when any of them is malformed. */
+    fun normalizeMacList(text: String): String? {
+        val parts = text.split(',', ' ', ';').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return null
+        val normalized = parts.map { normalizeMac(it) ?: return null }
+        return normalized.distinct().joinToString(",")
+    }
+
+    fun isValidMacList(text: String): Boolean = normalizeMacList(text) != null
+
     fun normalizeMac(text: String): String? {
         val cleaned = text.trim().replace("-", ":").uppercase()
         val hex = cleaned.replace(":", "")
@@ -38,10 +48,11 @@ object WakeOnLan {
     }
 
     /** Sends the packet to every given target (broadcast addresses and the last known unicast address). */
-    fun send(mac: String, targets: List<InetAddress>, ports: List<Int> = listOf(9, 7)) {
+    fun send(mac: String, targets: List<InetAddress>, ports: List<Int> = listOf(9, 7), bind: (DatagramSocket) -> Unit = {}) {
         val packet = magicPacket(mac)
         DatagramSocket().use { socket ->
             socket.broadcast = true
+            bind(socket)
             for (target in targets) {
                 for (port in ports) {
                     runCatching { socket.send(DatagramPacket(packet, packet.size, target, port)) }

@@ -2,11 +2,22 @@ package com.jrs8205.appletvremote.discovery
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import java.net.DatagramSocket
 import java.net.Inet4Address
 import java.net.InetAddress
 
 /** Where to send broadcasts: the limited broadcast plus the directed broadcast of every LAN interface. */
 class NetworkTargets(private val connectivity: ConnectivityManager) {
+
+    /** Binds a socket to the Wi-Fi or Ethernet network; a phone with mobile data would otherwise send broadcasts nowhere. */
+    fun bindToLan(socket: DatagramSocket) {
+        val lan = connectivity.allNetworks.firstOrNull { network ->
+            connectivity.getNetworkCapabilities(network)?.let {
+                it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            } == true
+        } ?: return
+        runCatching { lan.bindSocket(socket) }
+    }
 
     fun broadcastAddresses(): List<InetAddress> {
         val targets = LinkedHashSet<InetAddress>()

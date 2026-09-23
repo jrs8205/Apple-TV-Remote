@@ -40,7 +40,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setLgEnabled(enabled: Boolean) = viewModelScope.launch { container.lgTvRepository.setEnabled(enabled) }
     fun setLgHost(host: String) = viewModelScope.launch { container.lgTvRepository.setHost(host) }
     fun setLgInput(inputId: String) = viewModelScope.launch { container.lgTvRepository.setInputId(inputId) }
-    fun setLgMac(text: String) = viewModelScope.launch { container.lgTvRepository.setMacAddress(if (text.isBlank()) null else WakeOnLan.normalizeMac(text)) }
+    fun setLgMac(text: String) = viewModelScope.launch { container.lgTvRepository.setMacAddress(if (text.isBlank()) null else WakeOnLan.normalizeMacList(text)) }
 
     fun pairLgTv(host: String) = viewModelScope.launch {
         lgStatus.value = LgStatus.Connecting

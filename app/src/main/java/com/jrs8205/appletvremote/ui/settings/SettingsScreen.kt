@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -79,6 +80,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
         ) {
             SectionTitle(stringResource(R.string.settings_navigation_mode))
@@ -195,6 +197,7 @@ private fun LgTvSection(viewModel: SettingsViewModel) {
             label = { Text(stringResource(R.string.settings_lg_host)) },
             supportingText = { Text(stringResource(R.string.settings_lg_host_hint)) },
             singleLine = true,
+            trailingIcon = { TextButton(onClick = { viewModel.setLgHost(host) }) { Text(stringResource(R.string.save)) } },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -231,11 +234,14 @@ private fun LgTvSection(viewModel: SettingsViewModel) {
         )
         OutlinedTextField(
             value = mac,
-            onValueChange = { mac = it; if (it.isBlank() || WakeOnLan.isValidMac(it)) viewModel.setLgMac(it) },
+            onValueChange = { mac = it },
             label = { Text(stringResource(R.string.settings_lg_mac)) },
             supportingText = { Text(stringResource(R.string.settings_lg_mac_hint)) },
-            isError = mac.isNotBlank() && !WakeOnLan.isValidMac(mac),
+            isError = mac.isNotBlank() && !WakeOnLan.isValidMacList(mac),
             singleLine = true,
+            trailingIcon = {
+                TextButton(enabled = mac.isBlank() || WakeOnLan.isValidMacList(mac), onClick = { viewModel.setLgMac(mac) }) { Text(stringResource(R.string.save)) }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),

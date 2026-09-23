@@ -170,44 +170,43 @@ class RemoteController(
      */
     fun wakeAndConnect() {
         val lg = lgTvRepository.settings
+        _state.update { it.copy(wakingTv = true) }
         enqueue {
-            val settings = lg.first()
-            if (settings.enabled && settings.host.isNotBlank()) {
-                _state.update { it.copy(wakingTv = true) }
-                try {
-                    wakeThroughLgTv(settings)
-                } finally {
-                    _state.update { it.copy(wakingTv = false) }
+            try {
+                val settings = lg.first()
+                if (settings.enabled && settings.host.isNotBlank()) wakeThroughLgTv(settings)
+                wake()
+                var attempt = 0
+                while (true) {
+                    try {
+                        ensureConnected()
+                        break
+                    } catch (e: CompanionException) {
+                        if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
+                        delay(WAKE_RETRY_DELAY_MS)
+                        refreshAddress(_state.value.device ?: throw e)
+                    }
                 }
+                pressButton(HidButton.WAKE)
+                _state.update { it.copy(systemStatus = SystemStatus.AWAKE) }
+            } finally {
+                _state.update { it.copy(wakingTv = false) }
             }
-            wake()
-            var attempt = 0
-            while (true) {
-                try {
-                    ensureConnected()
-                    break
-                } catch (e: CompanionException) {
-                    if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
-                    delay(WAKE_RETRY_DELAY_MS)
-                    refreshAddress(_state.value.device ?: throw e)
-                }
-            }
-            pressButton(HidButton.WAKE)
-            _state.update { it.copy(systemStatus = SystemStatus.AWAKE) }
         }
     }
 
     /** Turns the LG TV on (Wake-on-LAN, then waits for its socket) and selects the Apple TV's input. */
     private suspend fun wakeThroughLgTv(settings: LgTvSettings) {
-        settings.macAddress?.let { mac ->
+        val macs = settings.macAddress?.split(',')?.map(String::trim)?.filter(String::isNotEmpty).orEmpty()
+        if (macs.isNotEmpty()) {
             withContext(Dispatchers.IO) {
                 val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(settings.host) }.getOrNull())
                 repeat(3) {
-                    runCatching { WakeOnLan.send(mac, targets) }
+                    for (mac in macs) runCatching { WakeOnLan.send(mac, targets, bind = networkTargets::bindToLan) }.onFailure { log.log { "LG wake-on-lan failed: $it" } }
                     delay(250)
                 }
             }
-            log.log { "sent wake-on-lan to the LG TV" }
+            log.log { "sent wake-on-lan to the LG TV (${macs.size} addresses)" }
         }
         val deadline = System.currentTimeMillis() + LG_WAKE_TIMEOUT_MS
         var lastError: Exception? = null
@@ -236,7 +235,7 @@ class RemoteController(
                 val key = client.connect(null, onPrompt)
                 lgTvRepository.setHost(host)
                 lgTvRepository.setClientKey(key)
-                client.macAddresses().firstOrNull()?.let { lgTvRepository.setMacAddress(it) }
+                client.macAddresses().takeIf { it.isNotEmpty() }?.let { lgTvRepository.setMacAddress(it.joinToString(",")) }
             }
             Unit
         }
@@ -278,7 +277,7 @@ class RemoteController(
             withContext(Dispatchers.IO) {
                 val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(device.host) }.getOrNull())
                 repeat(3) {
-                    runCatching { WakeOnLan.send(mac, targets) }.onFailure { log.log { "wake-on-lan failed: $it" } }
+                    runCatching { WakeOnLan.send(mac, targets, bind = networkTargets::bindToLan) }.onFailure { log.log { "wake-on-lan failed: $it" } }
                     delay(250)
                 }
                 log.log { "sent wake-on-lan to $mac via ${targets.size} targets" }
@@ -294,11 +293,23 @@ class RemoteController(
     fun skip(seconds: Double) = enqueue { skip(seconds) }
 
     fun togglePower() {
+        if (_state.value.wakingTv) {
+            log.log { "power tap ignored: wake-up already in progress" }
+            return
+        }
         if (_state.value.connection != ConnectionState.Ready) {
             wakeAndConnect()
             return
         }
-        enqueue { togglePowerConnected() }
+        enqueue {
+            try {
+                togglePowerConnected()
+            } catch (e: CompanionException) {
+                // The socket looked open but the TV had gone to sleep behind it: treat this as a wake request.
+                log.log { "power command failed on a stale connection, waking instead: $e" }
+                wakeAndConnect()
+            }
+        }
     }
 
     private suspend fun CompanionClient.togglePowerConnected() {
@@ -450,8 +461,8 @@ class RemoteController(
         const val WAKE_CONNECT_ATTEMPTS = 6
         const val MAC_LEARN_TIMEOUT_MS = 20_000L
         const val ADDRESS_REFRESH_MS = 6_000L
-        const val LG_WAKE_TIMEOUT_MS = 45_000L
-        const val LG_RETRY_DELAY_MS = 3_000L
-        const val LG_CEC_SETTLE_MS = 5_000L
+        const val LG_WAKE_TIMEOUT_MS = 90_000L
+        const val LG_RETRY_DELAY_MS = 1_000L
+        const val LG_CEC_SETTLE_MS = 3_000L
     }
 }

@@ -29,7 +29,7 @@ class LgTvClient(
 ) : AutoCloseable {
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
+        .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
         .sslSocketFactory(trustingContext().socketFactory, TRUST_ALL)
         .hostnameVerifier { _, _ -> true }
@@ -89,7 +89,7 @@ class LgTvClient(
         if (socket != null) return
         val request = Request.Builder().url("wss://$host:3001/").build()
         socket = http.newWebSocket(request, Listener())
-        val result = withTimeoutOrNull(6_000) {
+        val result = withTimeoutOrNull(4_000) {
             kotlinx.coroutines.selects.select {
                 opened.onAwait { null }
                 closed.onAwait { it }
