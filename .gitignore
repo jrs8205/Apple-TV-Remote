@@ -1,0 +1,22 @@
+# Build output and IDE state
+/build/
+/app/build/
+*.iml
+captures/
+local.properties
+
+# Signing material never enters the repo
+keystore.properties
+*.jks
+*.keystore
+
+# Reference material kept only locally
+*.apk
+*.apk+
+*.aab
+*.webp
+/decompiled/
+
+# Hidden tool and cache directories at the project root (Gradle, Kotlin, IDE, local helpers)
+/.*/
+!/.github/
