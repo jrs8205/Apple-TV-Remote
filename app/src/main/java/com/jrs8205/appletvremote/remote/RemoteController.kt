@@ -107,20 +107,52 @@ class RemoteController(
                 } catch (e: Exception) {
                     log.log { "command failed: $e" }
                     _state.update { it.copy(lastError = e) }
-                    // A TV in deep sleep refuses or times out the TCP connect; one magic packet and a retry usually fixes it.
-                    if (e is CompanionException.ConnectionClosed && wakeIfPossible(throttleMs = AUTO_WAKE_THROTTLE_MS)) {
-                        delay(WAKE_RETRY_DELAY_MS)
-                        try {
-                            active.command()
-                            _state.update { it.copy(lastError = null) }
-                        } catch (retry: Exception) {
-                            if (retry is CancellationException) throw retry
-                            log.log { "command failed after wake: $retry" }
-                        }
-                    }
+                    if (e is CompanionException.ConnectionClosed) recover(command)
                 }
             }
         }
+    }
+
+    /**
+     * The Apple TV picks a new port on every boot and may get a new address, so a failed connect
+     * first re-resolves it over mDNS. A TV that is not on the network at all gets a wake-up packet.
+     */
+    private suspend fun recover(command: suspend CompanionClient.() -> Unit) {
+        val device = _state.value.device ?: return
+        val retry: suspend () -> Unit = {
+            val client = currentClient()
+            if (client != null) {
+                try {
+                    client.command()
+                    _state.update { it.copy(lastError = null) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.log { "command failed after recovery: $e" }
+                }
+            }
+        }
+        if (refreshAddress(device)) {
+            retry()
+            return
+        }
+        if (wakeIfPossible(throttleMs = AUTO_WAKE_THROTTLE_MS)) {
+            delay(WAKE_RETRY_DELAY_MS)
+            if (refreshAddress(device)) log.log { "address refreshed after wake" }
+            retry()
+        }
+    }
+
+    /** Looks the TV up by name for a few seconds; stores and returns true when its address or port changed. */
+    private suspend fun refreshAddress(device: PairedDevice): Boolean {
+        val found = withTimeoutOrNull(ADDRESS_REFRESH_MS) {
+            discovery.devices().mapNotNull { list -> list.firstOrNull { it.serviceName == device.name } }.first()
+        } ?: return false
+        if (found.host == device.host && found.port == device.port) return false
+        log.log { "address changed to ${found.host}:${found.port}" }
+        deviceRepository.updateAddress(found.host, found.port)
+        withTimeoutOrNull(2000) { _state.first { it.device?.host == found.host && it.device?.port == found.port } }
+        return true
     }
 
     /** Sends Wake-on-LAN packets when the MAC address is known; returns false otherwise. */
@@ -344,5 +376,6 @@ class RemoteController(
         const val WAKE_RETRY_DELAY_MS = 4_000L
         const val WAKE_CONNECT_ATTEMPTS = 6
         const val MAC_LEARN_TIMEOUT_MS = 20_000L
+        const val ADDRESS_REFRESH_MS = 6_000L
     }
 }

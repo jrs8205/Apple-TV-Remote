@@ -57,6 +57,7 @@ class NsdDiscovery(context: Context) {
                 val callback = object : NsdManager.ServiceInfoCallback {
                     override fun onServiceUpdated(info: NsdServiceInfo) {
                         val mac = info.attributes["deviceid"]?.toString(Charsets.UTF_8)?.let(WakeOnLan::normalizeMac) ?: return
+                        if (WakeOnLan.isLocallyAdministered(mac)) return
                         synchronized(found) { macByName[info.serviceName] = mac }
                         publish()
                     }

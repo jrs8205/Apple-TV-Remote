@@ -15,6 +15,12 @@ object WakeOnLan {
 
     fun isValidMac(text: String): Boolean = macPattern.matches(text.trim())
 
+    /** Randomized addresses (second-least-significant bit of the first byte set) never belong to a physical port. */
+    fun isLocallyAdministered(mac: String): Boolean {
+        val first = normalizeMac(mac)?.substring(0, 2)?.toInt(16) ?: return false
+        return first and 0x02 != 0
+    }
+
     fun normalizeMac(text: String): String? {
         val cleaned = text.trim().replace("-", ":").uppercase()
         val hex = cleaned.replace(":", "")
