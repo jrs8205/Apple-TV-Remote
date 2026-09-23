@@ -104,4 +104,21 @@
     <string name="media_paused">Keskeytetty</string>
     <string name="media_idle">Ei toistoa</string>
     <string name="tile_not_paired">Ei paritettu</string>
+
+    <string name="settings_lg_title">LG-televisio</string>
+    <string name="settings_lg_enabled">Herätä LG-television kautta</string>
+    <string name="settings_lg_enabled_hint">Kun Apple TV nukkuu, käynnistä LG-televisio ja vaihda se Apple TV:n tuloon. HDMI-CEC herättää sitten Apple TV:n. Televisiossa pitää olla päällä asetus, joka sallii käynnistyksen puhelimella.</string>
+    <string name="settings_lg_host">Television IP-osoite</string>
+    <string name="settings_lg_host_hint">Näkyy televisiossa kohdassa Asetukset, Verkko. Kiinteä osoite reitittimessä pitää sen samana.</string>
+    <string name="settings_lg_pair">Parita television kanssa</string>
+    <string name="settings_lg_pair_again">Parita uudelleen</string>
+    <string name="settings_lg_not_paired">Televisio pyytää sinua sallimaan tämän sovelluksen.</string>
+    <string name="settings_lg_prompted">Hyväksy pyyntö television ruudulta…</string>
+    <string name="settings_lg_paired">Paritettu.</string>
+    <string name="settings_lg_failed">Epäonnistui: %1$s</string>
+    <string name="settings_lg_input">Apple TV:n tulo</string>
+    <string name="settings_lg_mac">Television MAC-osoite herätystä varten</string>
+    <string name="settings_lg_mac_hint">Täytetään automaattisesti, kun paritus onnistuu. Tarvitaan television käynnistämiseen valmiustilasta.</string>
+    <string name="settings_lg_turn_off">Sammuta televisio nyt</string>
+    <string name="state_waking_tv">Käynnistetään televisiota…</string>
 </resources>

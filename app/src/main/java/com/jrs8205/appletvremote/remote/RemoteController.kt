@@ -2,6 +2,9 @@ package com.jrs8205.appletvremote.remote
 
 import com.jrs8205.appletvremote.data.DeviceRepository
 import com.jrs8205.appletvremote.data.IdentityRepository
+import com.jrs8205.appletvremote.data.LgTvRepository
+import com.jrs8205.appletvremote.data.LgTvSettings
+import com.jrs8205.appletvremote.lgtv.LgTvClient
 import com.jrs8205.appletvremote.data.PairedDevice
 import com.jrs8205.appletvremote.discovery.DiscoveredDevice
 import com.jrs8205.appletvremote.discovery.NetworkTargets
@@ -54,6 +57,7 @@ data class RemoteState(
     val systemStatus: SystemStatus = SystemStatus.UNKNOWN,
     val media: MediaCapabilities = MediaCapabilities(0),
     val keyboard: TextInputState? = null,
+    val wakingTv: Boolean = false,
     val lastError: Throwable? = null,
 )
 
@@ -68,6 +72,7 @@ class RemoteController(
     private val connector: SocketConnector,
     private val networkTargets: NetworkTargets,
     private val discovery: NsdDiscovery,
+    private val lgTvRepository: LgTvRepository,
     private val clientName: String,
     private val clientModel: String,
     val log: ConnectionLog,
@@ -158,13 +163,24 @@ class RemoteController(
     /** Sends Wake-on-LAN packets when the MAC address is known; returns false otherwise. */
     fun wake(): Boolean = wakeIfPossible(throttleMs = 0)
 
-    /** Wakes the TV (if possible) and keeps trying to connect for a while, since booting takes several seconds. */
+    /**
+     * Wakes the chain: first the LG TV over the network (it switches to the Apple TV's HDMI input,
+     * which wakes the Apple TV through HDMI-CEC), then Wake-on-LAN to the Apple TV itself, then
+     * repeated connect attempts while everything boots.
+     */
     fun wakeAndConnect() {
-        if (!wake()) {
-            connect()
-            return
-        }
+        val lg = lgTvRepository.settings
         enqueue {
+            val settings = lg.first()
+            if (settings.enabled && settings.host.isNotBlank()) {
+                _state.update { it.copy(wakingTv = true) }
+                try {
+                    wakeThroughLgTv(settings)
+                } finally {
+                    _state.update { it.copy(wakingTv = false) }
+                }
+            }
+            wake()
             var attempt = 0
             while (true) {
                 try {
@@ -173,11 +189,68 @@ class RemoteController(
                 } catch (e: CompanionException) {
                     if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
                     delay(WAKE_RETRY_DELAY_MS)
+                    refreshAddress(_state.value.device ?: throw e)
                 }
             }
-            // The TV accepts connections while dozing; a wake press lights the screen and is harmless when awake.
             pressButton(HidButton.WAKE)
             _state.update { it.copy(systemStatus = SystemStatus.AWAKE) }
+        }
+    }
+
+    /** Turns the LG TV on (Wake-on-LAN, then waits for its socket) and selects the Apple TV's input. */
+    private suspend fun wakeThroughLgTv(settings: LgTvSettings) {
+        settings.macAddress?.let { mac ->
+            withContext(Dispatchers.IO) {
+                val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(settings.host) }.getOrNull())
+                repeat(3) {
+                    runCatching { WakeOnLan.send(mac, targets) }
+                    delay(250)
+                }
+            }
+            log.log { "sent wake-on-lan to the LG TV" }
+        }
+        val deadline = System.currentTimeMillis() + LG_WAKE_TIMEOUT_MS
+        var lastError: Exception? = null
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                LgTvClient(settings.host, log).use { client ->
+                    client.connect(settings.clientKey, timeoutMs = 15_000)
+                    client.switchInput(settings.inputId)
+                }
+                log.log { "LG TV switched to ${settings.inputId}" }
+                delay(LG_CEC_SETTLE_MS)
+                return
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                lastError = e
+                delay(LG_RETRY_DELAY_MS)
+            }
+        }
+        log.log { "LG TV did not respond: $lastError" }
+    }
+
+    /** Pairs with the LG TV: the TV shows a prompt, the key it returns is stored. Also learns its MAC. */
+    suspend fun pairLgTv(host: String, onPrompt: () -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            LgTvClient(host, log).use { client ->
+                val key = client.connect(null, onPrompt)
+                lgTvRepository.setHost(host)
+                lgTvRepository.setClientKey(key)
+                client.macAddresses().firstOrNull()?.let { lgTvRepository.setMacAddress(it) }
+            }
+            Unit
+        }
+    }
+
+    /** Sends the TV to standby; HDMI-CEC puts the Apple TV to sleep with it. */
+    suspend fun turnOffLgTv(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val settings = lgTvRepository.settings.first()
+            if (!settings.enabled || settings.host.isBlank()) throw IllegalStateException("LG TV not configured")
+            LgTvClient(settings.host, log).use { client ->
+                client.connect(settings.clientKey, timeoutMs = 15_000)
+                client.turnOff()
+            }
         }
     }
 
@@ -377,5 +450,8 @@ class RemoteController(
         const val WAKE_CONNECT_ATTEMPTS = 6
         const val MAC_LEARN_TIMEOUT_MS = 20_000L
         const val ADDRESS_REFRESH_MS = 6_000L
+        const val LG_WAKE_TIMEOUT_MS = 45_000L
+        const val LG_RETRY_DELAY_MS = 3_000L
+        const val LG_CEC_SETTLE_MS = 5_000L
     }
 }

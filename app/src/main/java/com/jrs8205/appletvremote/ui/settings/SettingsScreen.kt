@@ -145,6 +145,9 @@ fun SettingsScreen(
             }
             HorizontalDivider()
 
+            LgTvSection(viewModel)
+            HorizontalDivider()
+
             ListItem(headlineContent = { Text(stringResource(R.string.settings_logs)) }, modifier = Modifier.clickable(onClick = onOpenLogs))
             if (BuildConfig.DEBUG) {
                 ListItem(headlineContent = { Text(stringResource(R.string.settings_hid_probe)) }, modifier = Modifier.clickable(onClick = onOpenHidProbe))
@@ -165,6 +168,81 @@ fun SettingsScreen(
                 TextButton(onClick = { confirmForget = false; viewModel.forgetDevice(); onBack() }) { Text(stringResource(R.string.settings_unpair)) }
             },
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+@Composable
+private fun LgTvSection(viewModel: SettingsViewModel) {
+    val lg by viewModel.lgTv.collectAsStateWithLifecycle()
+    val status by viewModel.lgStatus.collectAsStateWithLifecycle()
+    var host by remember { mutableStateOf("") }
+    var mac by remember { mutableStateOf("") }
+    LaunchedEffect(lg.host) { host = lg.host }
+    LaunchedEffect(lg.macAddress) { mac = lg.macAddress ?: "" }
+
+    SectionTitle(stringResource(R.string.settings_lg_title))
+    SwitchRow(
+        title = stringResource(R.string.settings_lg_enabled),
+        subtitle = stringResource(R.string.settings_lg_enabled_hint),
+        checked = lg.enabled,
+        onChange = viewModel::setLgEnabled,
+    )
+    if (lg.enabled) {
+        OutlinedTextField(
+            value = host,
+            onValueChange = { host = it },
+            label = { Text(stringResource(R.string.settings_lg_host)) },
+            supportingText = { Text(stringResource(R.string.settings_lg_host_hint)) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(if (lg.clientKey == null) R.string.settings_lg_pair else R.string.settings_lg_pair_again)) },
+            supportingContent = {
+                Text(
+                    when (val current = status) {
+                        SettingsViewModel.LgStatus.Idle -> stringResource(if (lg.clientKey == null) R.string.settings_lg_not_paired else R.string.settings_lg_paired)
+                        SettingsViewModel.LgStatus.Connecting -> stringResource(R.string.pairing_connecting)
+                        SettingsViewModel.LgStatus.Prompted -> stringResource(R.string.settings_lg_prompted)
+                        SettingsViewModel.LgStatus.Paired -> stringResource(R.string.settings_lg_paired)
+                        is SettingsViewModel.LgStatus.Failed -> stringResource(R.string.settings_lg_failed, current.message)
+                    },
+                )
+            },
+            modifier = Modifier.clickable(enabled = host.isNotBlank()) { viewModel.pairLgTv(host) },
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.settings_lg_input)) },
+            supportingContent = {
+                Row {
+                    listOf("HDMI_1", "HDMI_2", "HDMI_3", "HDMI_4").forEach { input ->
+                        FilterChip(
+                            selected = input == lg.inputId,
+                            onClick = { viewModel.setLgInput(input) },
+                            label = { Text(input.replace('_', ' ')) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+            },
+        )
+        OutlinedTextField(
+            value = mac,
+            onValueChange = { mac = it; if (it.isBlank() || WakeOnLan.isValidMac(it)) viewModel.setLgMac(it) },
+            label = { Text(stringResource(R.string.settings_lg_mac)) },
+            supportingText = { Text(stringResource(R.string.settings_lg_mac_hint)) },
+            isError = mac.isNotBlank() && !WakeOnLan.isValidMac(mac),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.settings_lg_turn_off)) },
+            modifier = Modifier.clickable(enabled = lg.clientKey != null) { viewModel.turnOffLgTv() },
         )
     }
 }

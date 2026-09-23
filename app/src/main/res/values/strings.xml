@@ -104,4 +104,21 @@
     <string name="media_paused">Paused</string>
     <string name="media_idle">Nothing playing</string>
     <string name="tile_not_paired">Not paired</string>
+
+    <string name="settings_lg_title">LG television</string>
+    <string name="settings_lg_enabled">Wake through the LG TV</string>
+    <string name="settings_lg_enabled_hint">When the Apple TV is asleep, turn the LG TV on and switch it to the Apple TV input. HDMI-CEC then wakes the Apple TV. The TV needs the setting that lets a phone turn it on.</string>
+    <string name="settings_lg_host">TV IP address</string>
+    <string name="settings_lg_host_hint">Shown on the TV under Settings, Network. A fixed address in the router keeps it stable.</string>
+    <string name="settings_lg_pair">Pair with the TV</string>
+    <string name="settings_lg_pair_again">Pair again</string>
+    <string name="settings_lg_not_paired">The TV will ask you to allow this app.</string>
+    <string name="settings_lg_prompted">Accept the request on the TV screen…</string>
+    <string name="settings_lg_paired">Paired.</string>
+    <string name="settings_lg_failed">Failed: %1$s</string>
+    <string name="settings_lg_input">Apple TV input</string>
+    <string name="settings_lg_mac">TV MAC address for wake-up</string>
+    <string name="settings_lg_mac_hint">Filled in automatically when pairing succeeds. Needed to turn the TV on from standby.</string>
+    <string name="settings_lg_turn_off">Turn the TV off now</string>
+    <string name="state_waking_tv">Turning the TV on…</string>
 </resources>

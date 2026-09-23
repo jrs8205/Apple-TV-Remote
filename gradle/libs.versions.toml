@@ -11,6 +11,8 @@ lifecycle = "2.11.0"
 media3 = "1.11.1"
 bouncycastle = "1.86"
 ddPlist = "1.30"
+okhttp = "5.4.0"
+orgJson = "20250517"
 
 junit = "4.13.2"
 turbine = "1.2.1"
@@ -35,6 +37,8 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 dd-plist = { group = "com.googlecode.plist", name = "dd-plist", version.ref = "ddPlist" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 
 [plugins]

@@ -133,6 +133,42 @@ class DeviceRepository(private val dataStore: DataStore<Preferences>, cipher: Se
     }
 }
 
+data class LgTvSettings(
+    val enabled: Boolean = false,
+    val host: String = "",
+    val macAddress: String? = null,
+    val clientKey: String? = null,
+    val inputId: String = "HDMI_1",
+)
+
+/** The LG webOS TV that the Apple TV hangs off, used only to wake the chain over HDMI-CEC. */
+class LgTvRepository(private val dataStore: DataStore<Preferences>) {
+
+    val settings: Flow<LgTvSettings> = dataStore.data.map { prefs ->
+        LgTvSettings(
+            enabled = prefs[ENABLED] ?: false,
+            host = prefs[HOST] ?: "",
+            macAddress = prefs[MAC],
+            clientKey = prefs[CLIENT_KEY],
+            inputId = prefs[INPUT] ?: "HDMI_1",
+        )
+    }
+
+    suspend fun setEnabled(enabled: Boolean) = dataStore.edit { it[ENABLED] = enabled }
+    suspend fun setHost(host: String) = dataStore.edit { it[HOST] = host.trim() }
+    suspend fun setMacAddress(mac: String?) = dataStore.edit { if (mac.isNullOrBlank()) it.remove(MAC) else it[MAC] = mac }
+    suspend fun setClientKey(key: String?) = dataStore.edit { if (key.isNullOrBlank()) it.remove(CLIENT_KEY) else it[CLIENT_KEY] = key }
+    suspend fun setInputId(inputId: String) = dataStore.edit { it[INPUT] = inputId }
+
+    private companion object {
+        val ENABLED = booleanPreferencesKey("lg_enabled")
+        val HOST = stringPreferencesKey("lg_host")
+        val MAC = stringPreferencesKey("lg_mac")
+        val CLIENT_KEY = stringPreferencesKey("lg_client_key")
+        val INPUT = stringPreferencesKey("lg_input")
+    }
+}
+
 /** The random identifier this phone reports as `_pubID`; created once and kept. */
 class IdentityRepository(private val dataStore: DataStore<Preferences>) {
 
