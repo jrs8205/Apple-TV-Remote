@@ -17,7 +17,7 @@ import kotlin.concurrent.thread
  * A minimal Apple TV on localhost: answers pair-setup and pair-verify through [FakeAccessory],
  * switches to encrypted frames after verify, records every OPACK message and replies to requests.
  */
-class FakeAppleTv(val accessory: FakeAccessory = FakeAccessory()) : AutoCloseable {
+class FakeAppleTv(val accessory: FakeAccessory = FakeAccessory(), listenPort: Int = 0) : AutoCloseable {
 
     data class Recorded(val frameType: FrameType, val messageType: Long?, val name: String?, val content: Map<*, *>, val xid: Long?)
 
@@ -32,7 +32,7 @@ class FakeAppleTv(val accessory: FakeAccessory = FakeAccessory()) : AutoCloseabl
     @Volatile var errorFor: Map<String, String> = emptyMap()
     @Volatile var holdResponseFor: String? = null
 
-    private val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+    private val server = ServerSocket(listenPort, 1, InetAddress.getLoopbackAddress())
     val port: Int get() = server.localPort
     @Volatile private var current: Connection? = null
     private val acceptThread: Thread

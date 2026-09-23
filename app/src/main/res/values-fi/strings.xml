@@ -1,4 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Apple TV Remote</string>
+    <string name="cancel">Peruuta</string>
+    <string name="retry">Yritä uudelleen</string>
+
+    <string name="onboarding_title">Tervetuloa</string>
+    <string name="onboarding_body">Tämä sovellus tekee puhelimestasi Apple TV:n kaukosäätimen. Ohjaa toistoa, äänenvoimakkuutta, navigointia ja tekstinsyöttöä kotiverkon kautta.</string>
+    <string name="onboarding_local_network_notice">Android pyytää lupaa paikallisverkon käyttöön. Sitä tarvitaan Apple TV:n löytämiseen ja yhdistämiseen.</string>
+    <string name="onboarding_start">Aloita</string>
+
+    <string name="permission_local_network_title">Paikallisverkon käyttölupa tarvitaan</string>
+    <string name="permission_local_network_body">Ilman paikallisverkon käyttölupaa sovellus ei löydä Apple TV:tä eikä saa siihen yhteyttä. Myönnä lupa tässä tai järjestelmän asetuksissa.</string>
+    <string name="permission_grant">Myönnä lupa</string>
+    <string name="permission_open_settings">Avaa sovelluksen asetukset</string>
+
+    <string name="pairing_choose_tv">Valitse TV</string>
+    <string name="pairing_searching">Etsitään Apple TV -laitteita…</string>
+    <string name="pairing_discovery_failed">Haku epäonnistui. Tarkista, että Wi-Fi on päällä ja paikallisverkon käyttö on sallittu.</string>
+    <string name="pairing_pair">Parita</string>
+    <string name="pairing_connecting">Yhdistetään…</string>
+    <string name="pairing_connecting_message">Varmista, että %1$s on päällä. Herääminen voi kestää muutaman sekunnin.</string>
+    <string name="pairing_enter_pin">Syötä PIN-koodi</string>
+    <string name="pairing_enter_pin_message">Syötä koodi, jonka %1$s näyttää.</string>
+    <string name="pairing_verifying">Paritetaan…</string>
+    <string name="pairing_failed_title">Paritus epäonnistui</string>
+    <string name="pairing_choose_another">Valitse toinen TV</string>
+    <string name="pairing_error_wrong_pin">Väärä PIN-koodi. Syötä TV:n näyttämä uusi koodi.</string>
+    <string name="pairing_error_backoff">Apple TV estää parituksen hetkellisesti. Odota minuutti ja yritä uudelleen.</string>
+    <string name="pairing_error_max_peers">Tähän Apple TV:hen on jo paritettu suurin sallittu määrä kaukosäätimiä.</string>
+    <string name="pairing_error_max_tries">Liian monta väärää PIN-koodia. Odota hetki ja yritä uudelleen.</string>
+    <string name="pairing_error_unavailable">Paritus ei ole nyt mahdollista tällä Apple TV:llä.</string>
+    <string name="pairing_error_busy">Apple TV on varattu. Yritä uudelleen.</string>
+    <string name="pairing_error_connect">Apple TV:hen ei saatu yhteyttä.</string>
+    <string name="pairing_error_unknown">Paritus epäonnistui. Yritä uudelleen.</string>
+
+    <string name="state_disconnected">Ei yhteyttä</string>
+    <string name="state_connecting">Yhdistetään…</string>
+    <string name="state_connected">Yhdistetty</string>
+    <string name="state_failed">Yhteys epäonnistui</string>
+
+    <string name="remote_select">OK</string>
+    <string name="cd_back">Takaisin</string>
+    <string name="cd_home">TV</string>
+    <string name="cd_up">Ylös</string>
+    <string name="cd_down">Alas</string>
+    <string name="cd_left">Vasemmalle</string>
+    <string name="cd_right">Oikealle</string>
+    <string name="cd_play_pause">Toista tai keskeytä</string>
+    <string name="cd_volume_up">Äänenvoimakkuus ylös</string>
+    <string name="cd_volume_down">Äänenvoimakkuus alas</string>
+    <string name="cd_mute">Mykistä</string>
+    <string name="cd_power">Virta</string>
+    <string name="cd_keyboard">Näppäimistö</string>
+    <string name="cd_settings">Asetukset</string>
+    <string name="cd_clear">Tyhjennä</string>
+
+    <string name="settings_title">Asetukset</string>
+    <string name="settings_connection">Apple TV</string>
+    <string name="settings_not_paired">Ei paritettu</string>
+    <string name="settings_pair_another">Parita TV:n kanssa</string>
+    <string name="settings_unpair">Poista paritus</string>
+    <string name="settings_unpair_title">Poistetaanko paritus laitteesta %1$s?</string>
+    <string name="settings_unpair_message">Sinun täytyy paritata uudelleen PIN-koodilla, jotta voit ohjata sitä.</string>
+    <string name="settings_logs">Yhteysloki</string>
+    <string name="settings_version">Versio %1$s (%2$d)</string>
 </resources>
