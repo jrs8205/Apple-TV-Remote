@@ -6,6 +6,7 @@ import com.jrs8205.appletvremote.AppContainer
 import com.jrs8205.appletvremote.data.NavigationMode
 import com.jrs8205.appletvremote.data.PairedDevice
 import com.jrs8205.appletvremote.data.Settings
+import com.jrs8205.appletvremote.discovery.WakeOnLan
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -25,4 +26,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setHaptics(enabled: Boolean) = viewModelScope.launch { container.settingsRepository.setHapticsEnabled(enabled) }
     fun setMediaNotification(enabled: Boolean) = viewModelScope.launch { container.settingsRepository.setMediaNotificationEnabled(enabled) }
     fun forgetDevice() = viewModelScope.launch { container.remoteController.forget() }
+    fun setMacAddress(text: String) = viewModelScope.launch {
+        container.deviceRepository.setMacAddress(if (text.isBlank()) null else WakeOnLan.normalizeMac(text))
+    }
+    fun wake(): Boolean = container.remoteController.wake()
 }

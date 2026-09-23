@@ -1,17 +1,30 @@
 package com.jrs8205.appletvremote.ui.remote
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,56 +32,158 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jrs8205.appletvremote.R
 import com.jrs8205.appletvremote.protocol.companion.ConnectionState
 import com.jrs8205.appletvremote.protocol.companion.HidButton
+import com.jrs8205.appletvremote.protocol.companion.TouchPhase
+import com.jrs8205.appletvremote.ui.theme.RemoteColors
 
-/** Interim layout used to exercise the connection on a real Apple TV; the Siri Remote layout replaces it. */
+/** The Siri Remote layout, anchored to the bottom of the screen so every control sits under the thumb. */
 @Composable
-fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit) {
+fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit, onOpenKeyboard: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     LaunchedEffect(state.device?.credentials?.controller?.pairingId) { if (state.device != null) viewModel.connect() }
+
+    val padActions = remember(viewModel) {
+        object : ClickPadActions {
+            override fun click(button: HidButton) = viewModel.press(button)
+            override fun touch(phase: TouchPhase, x: Int, y: Int) = viewModel.touch(phase, x, y)
+        }
+    }
+    val haptics = settings.hapticsEnabled
+    val bodyColor = if (isSystemInDarkTheme()) RemoteColors.AluminiumDark else RemoteColors.AluminiumLight
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .safeDrawingPadding()
-            .padding(horizontal = 16.dp),
+            .statusBarsPadding(),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 4.dp, top = 4.dp),
+        ) {
             Column(Modifier.weight(1f)) {
-                Text(state.device?.name ?: stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
+                Text(state.device?.name ?: stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(connectionLabel(state.connection), style = MaterialTheme.typography.bodySmall)
             }
+            IconButton(onClick = onOpenKeyboard) { Icon(Icons.Default.Keyboard, contentDescription = stringResource(R.string.cd_keyboard)) }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.cd_settings)) }
         }
         Spacer(Modifier.weight(1f))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.press(HidButton.MENU) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cd_back)) }
-                Button(onClick = { viewModel.press(HidButton.HOME) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cd_home)) }
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .background(bodyColor, RoundedCornerShape(36.dp))
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    RemoteButton(
+                        contentDescription = stringResource(R.string.cd_power),
+                        onTap = viewModel::togglePower,
+                        size = 44.dp,
+                        haptics = haptics,
+                    ) { ButtonIcon(Icons.Default.PowerSettingsNew, size = 22.dp) }
+                }
+                Spacer(Modifier.height(8.dp))
+                ClickPad(
+                    mode = settings.navigationMode,
+                    actions = padActions,
+                    haptics = haptics,
+                    contentDescription = stringResource(R.string.cd_click_pad),
+                )
+                Spacer(Modifier.height(20.dp))
+                if (state.media.canSkipBackward || state.media.canSkipForward) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        SkipButton(
+                            enabled = state.media.canSkipBackward,
+                            seconds = settings.skipBackwardSeconds,
+                            forward = false,
+                            haptics = haptics,
+                            onTap = viewModel::skipBackward,
+                        )
+                        SkipButton(
+                            enabled = state.media.canSkipForward,
+                            seconds = settings.skipForwardSeconds,
+                            forward = true,
+                            haptics = haptics,
+                            onTap = viewModel::skipForward,
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    RemoteButton(
+                        contentDescription = stringResource(R.string.cd_back),
+                        onTap = { viewModel.press(HidButton.MENU) },
+                        onLongPress = { viewModel.press(HidButton.HOME) },
+                        haptics = haptics,
+                    ) { ButtonIcon(Icons.Default.ChevronLeft, size = 36.dp) }
+                    RemoteButton(
+                        contentDescription = stringResource(R.string.cd_home),
+                        onTap = { viewModel.press(HidButton.HOME) },
+                        onLongPress = { viewModel.hold(HidButton.HOME, CONTROL_CENTER_HOLD_MS) },
+                        haptics = haptics,
+                    ) { ButtonIcon(Icons.Default.Tv, size = 28.dp) }
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        RemoteButton(
+                            contentDescription = stringResource(R.string.cd_play_pause),
+                            onTap = { viewModel.press(HidButton.PLAY_PAUSE) },
+                            haptics = haptics,
+                        ) { PlayPauseGlyph() }
+                        RemoteButton(
+                            contentDescription = stringResource(R.string.cd_mute),
+                            onTap = { viewModel.press(HidButton.MUTE) },
+                            haptics = haptics,
+                        ) { ButtonIcon(Icons.Default.VolumeOff, size = 28.dp) }
+                    }
+                    VolumeRocker(
+                        onUp = { viewModel.press(HidButton.VOLUME_UP) },
+                        onDown = { viewModel.press(HidButton.VOLUME_DOWN) },
+                        upDescription = stringResource(R.string.cd_volume_up),
+                        downDescription = stringResource(R.string.cd_volume_down),
+                        height = 152.dp,
+                        haptics = haptics,
+                    )
+                }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.press(HidButton.UP) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cd_up)) }
-                Button(onClick = { viewModel.press(HidButton.SELECT) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.remote_select)) }
-                Button(onClick = { viewModel.press(HidButton.DOWN) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cd_down)) }
+        }
+    }
+}
+
+@Composable
+private fun SkipButton(enabled: Boolean, seconds: Int, forward: Boolean, haptics: Boolean, onTap: () -> Unit) {
+    val description = stringResource(if (forward) R.string.cd_skip_forward else R.string.cd_skip_backward, seconds)
+    Box(modifier = Modifier.width(68.dp), contentAlignment = Alignment.Center) {
+        if (enabled) {
+            RemoteButton(contentDescription = description, onTap = onTap, size = 56.dp, haptics = haptics) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ButtonIcon(if (forward) Icons.Default.FastForward else Icons.Default.FastRewind, size = 22.dp)
+                    Text("$seconds", color = RemoteColors.OnButton, style = MaterialTheme.typography.labelSmall)
+                }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.press(HidButton.PLAY_PAUSE) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cd_play_pause)) }
-                Button(onClick = { viewModel.press(HidButton.VOLUME_DOWN) }, modifier = Modifier.weight(1f)) { Text("−") }
-                Button(onClick = { viewModel.press(HidButton.VOLUME_UP) }, modifier = Modifier.weight(1f)) { Text("+") }
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -80,3 +195,5 @@ fun connectionLabel(state: ConnectionState): String = when (state) {
     ConnectionState.Ready -> stringResource(R.string.state_connected)
     is ConnectionState.Failed -> stringResource(R.string.state_failed)
 }
+
+private const val CONTROL_CENTER_HOLD_MS = 1000L

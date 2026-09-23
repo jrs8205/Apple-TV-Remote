@@ -64,4 +64,33 @@
     <string name="settings_unpair_message">You will need to pair again with a PIN to control it.</string>
     <string name="settings_logs">Connection log</string>
     <string name="settings_version">Version %1$s (%2$d)</string>
+
+    <string name="cd_click_pad">Click pad</string>
+    <string name="cd_skip_forward">Skip forward %1$d seconds</string>
+    <string name="cd_skip_backward">Skip back %1$d seconds</string>
+
+    <string name="settings_navigation_mode">Navigation</string>
+    <string name="settings_mode_touchpad">Touchpad</string>
+    <string name="settings_mode_touchpad_hint">Drag continuously, like the Siri Remote. Tap to select.</string>
+    <string name="settings_mode_swipe">Directional swipes</string>
+    <string name="settings_mode_swipe_hint">Each swipe moves the selection one step. Tap to select.</string>
+    <string name="settings_mode_dpad">D-pad</string>
+    <string name="settings_mode_dpad_hint">Tap the edges to move and the centre to select.</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_skip_forward">Skip forward</string>
+    <string name="settings_skip_backward">Skip back</string>
+    <string name="settings_seconds">%1$d s</string>
+    <string name="settings_volume_hardware">Phone volume buttons</string>
+    <string name="settings_volume_hardware_hint">Use the volume keys of the phone to control the TV volume while the remote is open.</string>
+    <string name="settings_media_controls">System media controls</string>
+    <string name="settings_media_controls_hint">Show playback controls in the notification shade and on the lock screen.</string>
+    <string name="settings_haptics">Haptic feedback</string>
+    <string name="settings_hid_probe">HID code test</string>
+
+    <string name="settings_mac_label">MAC address for wake-up</string>
+    <string name="settings_mac_hint">Picked up automatically from AirPlay while the TV is awake. You can also copy it from Settings, General, About on the Apple TV.</string>
+    <string name="settings_wake_now">Wake the Apple TV</string>
+    <string name="settings_wake_hint">Sends a Wake-on-LAN packet. Works over Ethernet and on many Wi-Fi setups.</string>
+    <string name="settings_wake_sent">Wake-up packet sent. Booting can take up to half a minute.</string>
+    <string name="settings_wake_no_mac">Enter the MAC address first.</string>
 </resources>

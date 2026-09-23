@@ -75,6 +75,7 @@ class DeviceRepository(private val dataStore: DataStore<Preferences>, cipher: Se
             wrappedSeed = prefs[SEED] ?: return@map null,
             accessoryIdHex = prefs[ACCESSORY_ID] ?: return@map null,
             accessoryPublicKeyHex = prefs[ACCESSORY_KEY] ?: return@map null,
+            macAddress = prefs[MAC],
         )
         codec.decode(stored)
     }
@@ -90,7 +91,12 @@ class DeviceRepository(private val dataStore: DataStore<Preferences>, cipher: Se
             prefs[SEED] = stored.wrappedSeed
             prefs[ACCESSORY_ID] = stored.accessoryIdHex
             prefs[ACCESSORY_KEY] = stored.accessoryPublicKeyHex
+            stored.macAddress?.let { prefs[MAC] = it } ?: prefs.remove(MAC)
         }
+    }
+
+    suspend fun setMacAddress(mac: String?) {
+        dataStore.edit { prefs -> if (mac.isNullOrBlank()) prefs.remove(MAC) else prefs[MAC] = mac }
     }
 
     suspend fun updateAddress(host: String, port: Int) {
@@ -110,6 +116,7 @@ class DeviceRepository(private val dataStore: DataStore<Preferences>, cipher: Se
             prefs.remove(SEED)
             prefs.remove(ACCESSORY_ID)
             prefs.remove(ACCESSORY_KEY)
+            prefs.remove(MAC)
         }
     }
 
@@ -122,6 +129,7 @@ class DeviceRepository(private val dataStore: DataStore<Preferences>, cipher: Se
         val SEED = stringPreferencesKey("device_wrapped_seed")
         val ACCESSORY_ID = stringPreferencesKey("device_accessory_id")
         val ACCESSORY_KEY = stringPreferencesKey("device_accessory_key")
+        val MAC = stringPreferencesKey("device_mac")
     }
 }
 

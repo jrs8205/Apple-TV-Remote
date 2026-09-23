@@ -4,6 +4,10 @@ import com.jrs8205.appletvremote.data.DeviceRepository
 import com.jrs8205.appletvremote.data.IdentityRepository
 import com.jrs8205.appletvremote.data.PairedDevice
 import com.jrs8205.appletvremote.discovery.DiscoveredDevice
+import com.jrs8205.appletvremote.discovery.NetworkTargets
+import com.jrs8205.appletvremote.discovery.NsdDiscovery
+import com.jrs8205.appletvremote.discovery.WakeOnLan
+import com.jrs8205.appletvremote.protocol.companion.CompanionException
 import com.jrs8205.appletvremote.protocol.companion.ClientInfo
 import com.jrs8205.appletvremote.protocol.companion.CompanionClient
 import com.jrs8205.appletvremote.protocol.companion.CompanionConnection
@@ -25,6 +29,7 @@ import com.jrs8205.appletvremote.protocol.pairing.Credentials
 import com.jrs8205.appletvremote.protocol.pairing.PairingException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -32,10 +37,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.net.InetAddress
 import java.util.UUID
 
 data class RemoteState(
@@ -55,6 +64,8 @@ class RemoteController(
     private val deviceRepository: DeviceRepository,
     private val identityRepository: IdentityRepository,
     private val connector: SocketConnector,
+    private val networkTargets: NetworkTargets,
+    private val discovery: NsdDiscovery,
     private val clientName: String,
     private val clientModel: String,
     val log: ConnectionLog,
@@ -68,6 +79,8 @@ class RemoteController(
     private var eventJob: Job? = null
     private var backgroundDisconnect: Job? = null
     private var pairing: PendingPairing? = null
+    @Volatile private var lastWakeAt = 0L
+    private var macLearning: Job? = null
 
     private val commands = Channel<suspend CompanionClient.() -> Unit>(Channel.UNLIMITED)
     private val touchPump = TouchPump(scope) { sample -> currentClient()?.touch(sample.phase, sample.x, sample.y) }
@@ -92,9 +105,76 @@ class RemoteController(
                 } catch (e: Exception) {
                     log.log { "command failed: $e" }
                     _state.update { it.copy(lastError = e) }
+                    // A TV in deep sleep refuses or times out the TCP connect; one magic packet and a retry usually fixes it.
+                    if (e is CompanionException.ConnectionClosed && wakeIfPossible(throttleMs = AUTO_WAKE_THROTTLE_MS)) {
+                        delay(WAKE_RETRY_DELAY_MS)
+                        try {
+                            active.command()
+                            _state.update { it.copy(lastError = null) }
+                        } catch (retry: Exception) {
+                            if (retry is CancellationException) throw retry
+                            log.log { "command failed after wake: $retry" }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /** Sends Wake-on-LAN packets when the MAC address is known; returns false otherwise. */
+    fun wake(): Boolean = wakeIfPossible(throttleMs = 0)
+
+    /** Wakes the TV (if possible) and keeps trying to connect for a while, since booting takes several seconds. */
+    fun wakeAndConnect() {
+        if (!wake()) {
+            connect()
+            return
+        }
+        enqueue {
+            var attempt = 0
+            while (true) {
+                try {
+                    ensureConnected()
+                    return@enqueue
+                } catch (e: CompanionException) {
+                    if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
+                    delay(WAKE_RETRY_DELAY_MS)
+                }
+            }
+        }
+    }
+
+    /** While the TV is awake its AirPlay record carries the MAC address; grab it once so wake-up works later. */
+    private fun learnMacAddress(device: PairedDevice) {
+        if (macLearning?.isActive == true) return
+        macLearning = scope.launch {
+            val mac = withTimeoutOrNull(MAC_LEARN_TIMEOUT_MS) {
+                discovery.devices().mapNotNull { list -> list.firstOrNull { it.serviceName == device.name }?.macAddress }.first()
+            }
+            if (mac != null) {
+                log.log { "learned MAC address for ${device.name}" }
+                deviceRepository.setMacAddress(mac)
+            }
+        }
+    }
+
+    private fun wakeIfPossible(throttleMs: Long): Boolean {
+        val device = _state.value.device ?: return false
+        val mac = device.macAddress ?: return false
+        val now = System.currentTimeMillis()
+        if (now - lastWakeAt < throttleMs) return true
+        lastWakeAt = now
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(device.host) }.getOrNull())
+                repeat(3) {
+                    runCatching { WakeOnLan.send(mac, targets) }.onFailure { log.log { "wake-on-lan failed: $it" } }
+                    delay(250)
+                }
+                log.log { "sent wake-on-lan to $mac via ${targets.size} targets" }
+            }
+        }
+        return true
     }
 
     fun press(button: HidButton, holdMs: Long = 0) = enqueue { pressButton(button, holdMs) }
@@ -103,7 +183,15 @@ class RemoteController(
 
     fun skip(seconds: Double) = enqueue { skip(seconds) }
 
-    fun togglePower() = enqueue {
+    fun togglePower() {
+        if (_state.value.connection != ConnectionState.Ready) {
+            wakeAndConnect()
+            return
+        }
+        enqueue { togglePowerConnected() }
+    }
+
+    private suspend fun CompanionClient.togglePowerConnected() {
         val status = fetchAttentionState()
         val button = if (status == SystemStatus.ASLEEP || status == SystemStatus.UNKNOWN) HidButton.WAKE else HidButton.SLEEP
         pressButton(button)
@@ -171,7 +259,7 @@ class RemoteController(
         }
         pending.connection.close()
         pairing = null
-        val device = PairedDevice(pending.device.serviceName, pending.device.host, pending.device.port, credentials)
+        val device = PairedDevice(pending.device.serviceName, pending.device.host, pending.device.port, credentials, pending.device.macAddress)
         dropClient()
         deviceRepository.save(device)
         _state.update { it.copy(device = device) }
@@ -204,7 +292,12 @@ class RemoteController(
         client = created
         clientDevice = device
         eventJob = scope.launch {
-            launch { created.state.collect { connection -> _state.update { it.copy(connection = connection) } } }
+            launch {
+                created.state.collect { connection ->
+                    _state.update { it.copy(connection = connection) }
+                    if (connection == ConnectionState.Ready && device.macAddress == null) learnMacAddress(device)
+                }
+            }
             created.events.collect { event ->
                 when (event) {
                     is CompanionEvent.SystemStatusChanged -> _state.update { it.copy(systemStatus = event.status) }
@@ -230,5 +323,9 @@ class RemoteController(
 
     private companion object {
         const val BACKGROUND_DISCONNECT_MS = 30_000L
+        const val AUTO_WAKE_THROTTLE_MS = 30_000L
+        const val WAKE_RETRY_DELAY_MS = 4_000L
+        const val WAKE_CONNECT_ATTEMPTS = 6
+        const val MAC_LEARN_TIMEOUT_MS = 20_000L
     }
 }

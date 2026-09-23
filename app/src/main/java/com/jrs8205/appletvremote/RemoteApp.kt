@@ -13,6 +13,7 @@ import com.jrs8205.appletvremote.data.KeystoreSecretCipher
 import com.jrs8205.appletvremote.data.SettingsRepository
 import com.jrs8205.appletvremote.data.appDataStore
 import com.jrs8205.appletvremote.discovery.AndroidSocketConnector
+import com.jrs8205.appletvremote.discovery.NetworkTargets
 import com.jrs8205.appletvremote.discovery.NsdDiscovery
 import com.jrs8205.appletvremote.remote.ConnectionLog
 import com.jrs8205.appletvremote.remote.RemoteController
@@ -34,6 +35,8 @@ class AppContainer(context: Context) {
         deviceRepository = deviceRepository,
         identityRepository = identityRepository,
         connector = AndroidSocketConnector(context.getSystemService(ConnectivityManager::class.java)),
+        networkTargets = NetworkTargets(context.getSystemService(ConnectivityManager::class.java)),
+        discovery = discovery,
         clientName = context.getString(R.string.app_name),
         clientModel = Build.MODEL,
         log = connectionLog,

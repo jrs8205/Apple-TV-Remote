@@ -64,4 +64,33 @@
     <string name="settings_unpair_message">Sinun täytyy paritata uudelleen PIN-koodilla, jotta voit ohjata sitä.</string>
     <string name="settings_logs">Yhteysloki</string>
     <string name="settings_version">Versio %1$s (%2$d)</string>
+
+    <string name="cd_click_pad">Klikkipinta</string>
+    <string name="cd_skip_forward">Siirry %1$d sekuntia eteenpäin</string>
+    <string name="cd_skip_backward">Siirry %1$d sekuntia taaksepäin</string>
+
+    <string name="settings_navigation_mode">Navigointi</string>
+    <string name="settings_mode_touchpad">Kosketuslevy</string>
+    <string name="settings_mode_touchpad_hint">Vedä sormella jatkuvasti kuten Siri Remotessa. Napauta valitaksesi.</string>
+    <string name="settings_mode_swipe">Pyyhkäisyt</string>
+    <string name="settings_mode_swipe_hint">Jokainen pyyhkäisy siirtää valintaa yhden askeleen. Napauta valitaksesi.</string>
+    <string name="settings_mode_dpad">Nuolinäppäimet</string>
+    <string name="settings_mode_dpad_hint">Napauta reunoja siirtyäksesi ja keskikohtaa valitaksesi.</string>
+    <string name="settings_playback">Toisto</string>
+    <string name="settings_skip_forward">Siirtymä eteenpäin</string>
+    <string name="settings_skip_backward">Siirtymä taaksepäin</string>
+    <string name="settings_seconds">%1$d s</string>
+    <string name="settings_volume_hardware">Puhelimen äänenvoimakkuusnapit</string>
+    <string name="settings_volume_hardware_hint">Säädä TV:n äänenvoimakkuutta puhelimen napeilla, kun kaukosäädin on auki.</string>
+    <string name="settings_media_controls">Järjestelmän mediaohjaimet</string>
+    <string name="settings_media_controls_hint">Näytä toiston ohjaimet ilmoituspaneelissa ja lukitusnäytöllä.</string>
+    <string name="settings_haptics">Värinäpalaute</string>
+    <string name="settings_hid_probe">HID-koodien testi</string>
+
+    <string name="settings_mac_label">MAC-osoite herätystä varten</string>
+    <string name="settings_mac_hint">Haetaan automaattisesti AirPlaysta, kun TV on hereillä. Voit myös kopioida sen Apple TV:n kohdasta Asetukset, Yleiset, Tietoja.</string>
+    <string name="settings_wake_now">Herätä Apple TV</string>
+    <string name="settings_wake_hint">Lähettää Wake-on-LAN-paketin. Toimii Ethernetillä ja monissa Wi-Fi-kokoonpanoissa.</string>
+    <string name="settings_wake_sent">Herätyspaketti lähetetty. Käynnistyminen voi kestää puoli minuuttia.</string>
+    <string name="settings_wake_no_mac">Syötä ensin MAC-osoite.</string>
 </resources>

@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
-enum class Screen { LOADING, ONBOARDING, PAIRING, REMOTE, SETTINGS, LOGS }
+enum class Screen { LOADING, ONBOARDING, PAIRING, REMOTE, SETTINGS, LOGS, HID_PROBE }
 
 /** Chooses the visible screen from stored state plus a small stack of overlays (settings, logs, re-pair). */
 class RootViewModel(container: AppContainer) : ViewModel() {
@@ -31,6 +31,7 @@ class RootViewModel(container: AppContainer) : ViewModel() {
     fun openSettings() = push(Screen.SETTINGS)
     fun openLogs() = push(Screen.LOGS)
     fun openPairing() = push(Screen.PAIRING)
+    fun openHidProbe() = push(Screen.HID_PROBE)
 
     /** Returns false when there was nothing to pop, so the activity can finish. */
     fun back(): Boolean {
