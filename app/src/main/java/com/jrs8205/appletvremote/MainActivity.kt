@@ -74,11 +74,7 @@ class MainActivity : ComponentActivity() {
                         Screen.LOADING -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         Screen.ONBOARDING -> OnboardingScreen(settingsRepository = appContainer.settingsRepository)
                         Screen.PAIRING -> PairingScreen(viewModel = pairingViewModel, onPaired = { rootViewModel.clearOverlays() })
-                        Screen.REMOTE -> RemoteScreen(
-                            viewModel = remoteViewModel,
-                            onOpenSettings = rootViewModel::openSettings,
-                            onOpenKeyboard = { },
-                        )
+                        Screen.REMOTE -> RemoteScreen(viewModel = remoteViewModel, onOpenSettings = rootViewModel::openSettings)
                         Screen.SETTINGS -> SettingsScreen(
                             viewModel = settingsViewModel,
                             onBack = { rootViewModel.back() },

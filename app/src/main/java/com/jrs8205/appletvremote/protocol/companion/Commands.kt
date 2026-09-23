@@ -83,7 +83,7 @@ data class MediaCapabilities(val flags: Long) {
 sealed interface CompanionEvent {
     data class SystemStatusChanged(val status: SystemStatus) : CompanionEvent
     data class MediaCapabilitiesChanged(val capabilities: MediaCapabilities) : CompanionEvent
-    data class TextInputStarted(val content: Map<*, *>) : CompanionEvent
+    data class TextInputStarted(val content: Map<*, *>, val state: com.jrs8205.appletvremote.protocol.textinput.TextInputState?) : CompanionEvent
     data object TextInputStopped : CompanionEvent
     data class Other(val name: String, val content: Map<*, *>) : CompanionEvent
 }

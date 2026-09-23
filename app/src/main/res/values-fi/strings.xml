@@ -93,4 +93,10 @@
     <string name="settings_wake_hint">Lähettää Wake-on-LAN-paketin. Toimii Ethernetillä ja monissa Wi-Fi-kokoonpanoissa.</string>
     <string name="settings_wake_sent">Herätyspaketti lähetetty. Käynnistyminen voi kestää puoli minuuttia.</string>
     <string name="settings_wake_no_mac">Syötä ensin MAC-osoite.</string>
+
+    <string name="keyboard_title">Kirjoita Apple TV:lle</string>
+    <string name="keyboard_hint">Teksti lähetetään TV:llä valittuun kenttään.</string>
+    <string name="keyboard_no_field">Valitse ensin tekstikenttä TV:llä.</string>
+    <string name="keyboard_clear">Tyhjennä</string>
+    <string name="keyboard_done">Valmis</string>
 </resources>

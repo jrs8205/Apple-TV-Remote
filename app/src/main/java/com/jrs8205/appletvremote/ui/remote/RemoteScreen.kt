@@ -32,7 +32,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,13 +45,17 @@ import com.jrs8205.appletvremote.R
 import com.jrs8205.appletvremote.protocol.companion.ConnectionState
 import com.jrs8205.appletvremote.protocol.companion.HidButton
 import com.jrs8205.appletvremote.protocol.companion.TouchPhase
+import com.jrs8205.appletvremote.ui.keyboard.TextInputSheet
 import com.jrs8205.appletvremote.ui.theme.RemoteColors
 
 /** The Siri Remote layout, anchored to the bottom of the screen so every control sits under the thumb. */
 @Composable
-fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit, onOpenKeyboard: () -> Unit) {
+fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    var showKeyboard by remember { mutableStateOf(false) }
+    // The TV reports when a text field gains focus; open the sheet then, and close it when focus leaves.
+    LaunchedEffect(state.keyboard != null) { showKeyboard = state.keyboard != null }
     LaunchedEffect(state.device?.credentials?.controller?.pairingId) { if (state.device != null) viewModel.connect() }
 
     val padActions = remember(viewModel) {
@@ -76,7 +82,7 @@ fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit, onOpenK
                 Text(state.device?.name ?: stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(connectionLabel(state.connection), style = MaterialTheme.typography.bodySmall)
             }
-            IconButton(onClick = onOpenKeyboard) { Icon(Icons.Default.Keyboard, contentDescription = stringResource(R.string.cd_keyboard)) }
+            IconButton(onClick = { showKeyboard = true }) { Icon(Icons.Default.Keyboard, contentDescription = stringResource(R.string.cd_keyboard)) }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.cd_settings)) }
         }
         Spacer(Modifier.weight(1f))
@@ -170,6 +176,15 @@ fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit, onOpenK
                 }
             }
         }
+    }
+    if (showKeyboard) {
+        TextInputSheet(
+            keyboard = state.keyboard,
+            onSend = viewModel::sendText,
+            onPress = viewModel::press,
+            onRefresh = viewModel::refreshKeyboard,
+            onDismiss = { showKeyboard = false },
+        )
     }
 }
 

@@ -7,6 +7,7 @@ import com.jrs8205.appletvremote.protocol.pairing.Credentials
 import com.jrs8205.appletvremote.protocol.pairing.FakeAccessory
 import com.jrs8205.appletvremote.protocol.pairing.PairSetup
 import com.jrs8205.appletvremote.protocol.pairing.PairingException
+import com.jrs8205.appletvremote.protocol.textinput.KeyedArchive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -48,6 +49,7 @@ class CompanionClientTest {
         credentials = credentials,
         clientInfo = clientInfo,
         requestTimeoutMs = timeoutMs,
+        attentionTimeoutMs = 500,
         clock = { now },
     )
 
@@ -60,7 +62,7 @@ class CompanionClientTest {
         assertEquals(ConnectionState.Ready, client.state.value)
         val names = tv.messages.map { it.name to it.messageType }
         assertEquals(
-            listOf("_systemInfo" to 2L, "_sessionStart" to 2L, "_tiStart" to 2L, "_interest" to 1L, "_interest" to 1L, "FetchAttentionState" to 2L),
+            listOf("_systemInfo" to 2L, "_sessionStart" to 2L, "TVRCSessionStart" to 2L, "_tiStart" to 2L, "_interest" to 1L, "_interest" to 1L, "FetchAttentionState" to 2L),
             names,
         )
         val info = tv.awaitMessage("_systemInfo").content
@@ -155,6 +157,29 @@ class CompanionClientTest {
     }
 
     @Test
+    fun unansweredAttentionStateDoesNotBreakTheConnection() = test {
+        tv.responder = { name, _ -> if (name == "FetchAttentionState") null else tv.defaultReply(name) }
+        val client = client()
+        client.ensureConnected()
+        assertEquals(ConnectionState.Ready, client.state.value)
+        assertEquals(null, client.fetchAttentionState())
+        client.pressButton(HidButton.MENU)
+        tv.awaitMessage("_hidC")
+        assertEquals(ConnectionState.Ready, client.state.value)
+        client.disconnect()
+    }
+
+    @Test
+    fun rejectedTvRcSessionStartIsIgnored() = test {
+        tv.errorFor = mapOf("TVRCSessionStart" to "unsupported")
+        val client = client()
+        client.ensureConnected()
+        assertEquals(ConnectionState.Ready, client.state.value)
+        assertEquals(mapOf("ProtocolVersionKey" to "1.2"), tv.awaitMessage("TVRCSessionStart").content)
+        client.disconnect()
+    }
+
+    @Test
     fun fetchAttentionStateReturnsTheStatus() = test {
         tv.responder = { name, _ -> if (name == "FetchAttentionState") mapOf("state" to 2L) else tv.defaultReply(name) }
         val client = client()
@@ -208,5 +233,50 @@ class CompanionClientTest {
         val error = runCatching { client.ensureConnected() }.exceptionOrNull()
         assertTrue("got $error", error is CompanionException.ConnectionClosed)
         assertTrue(client.state.value is ConnectionState.Failed)
+    }
+
+    @Test
+    fun textInputStateComesFromTheStartReply() = test {
+        val archive = CompanionClientTest::class.java.getResourceAsStream("/rti/ti_state.bplist")!!.use { it.readBytes() }
+        tv.responder = { name, _ -> if (name == "_tiStart") mapOf("_tiD" to archive) else tv.defaultReply(name) }
+        val client = client()
+        val state = client.textInputState()!!
+        assertEquals("Search", state.prompt)
+        assertEquals("typed so far", state.currentText)
+        assertArrayEquals(ByteArray(16) { (0x10 + it).toByte() }, state.sessionUuid)
+        client.disconnect()
+    }
+
+    @Test
+    fun sendTextRestartsTheSessionThenClearsAndInserts() = test {
+        val archive = CompanionClientTest::class.java.getResourceAsStream("/rti/ti_state.bplist")!!.use { it.readBytes() }
+        tv.responder = { name, _ -> if (name == "_tiStart") mapOf("_tiD" to archive) else tv.defaultReply(name) }
+        val client = client()
+        client.ensureConnected()
+        client.sendText("hei", replace = true)
+        tv.awaitMessage("_tiStop")
+        tv.awaitMessage("_tiStart", skip = 1)
+        val clear = tv.awaitMessage("_tiC")
+        val insert = tv.awaitMessage("_tiC", skip = 1)
+        assertEquals(1L, clear.messageType)
+        assertEquals(1L, clear.content["_tiV"])
+        val clearArchive = clear.content["_tiD"] as ByteArray
+        val session = KeyedArchive.resolve(clearArchive, listOf("textOperations", "targetSessionUUID", "NS.uuidbytes")) as ByteArray
+        assertArrayEquals(ByteArray(16) { (0x10 + it).toByte() }, session)
+        assertEquals("", KeyedArchive.resolve(clearArchive, listOf("textOperations", "textToAssert")))
+        val insertArchive = insert.content["_tiD"] as ByteArray
+        assertEquals("hei", KeyedArchive.resolve(insertArchive, listOf("textOperations", "keyboardOutput", "insertionText")))
+        client.sendText("!", replace = false)
+        tv.awaitMessage("_tiC", skip = 2)
+        assertEquals(3, tv.messages.count { it.name == "_tiC" })
+        client.disconnect()
+    }
+
+    @Test
+    fun sendTextWithoutAKeyboardSessionFails() = test {
+        val client = client()
+        val error = runCatching { client.sendText("hei", replace = true) }.exceptionOrNull()
+        assertTrue("got $error", error is CompanionException.Protocol)
+        client.disconnect()
     }
 }

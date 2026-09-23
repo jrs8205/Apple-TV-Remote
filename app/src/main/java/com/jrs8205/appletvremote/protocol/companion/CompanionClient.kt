@@ -5,6 +5,8 @@ import com.jrs8205.appletvremote.protocol.crypto.SecureRandomSource
 import com.jrs8205.appletvremote.protocol.log.ProtocolLog
 import com.jrs8205.appletvremote.protocol.pairing.Credentials
 import com.jrs8205.appletvremote.protocol.pairing.PairVerify
+import com.jrs8205.appletvremote.protocol.textinput.KeyedArchive
+import com.jrs8205.appletvremote.protocol.textinput.TextInputState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,7 @@ class CompanionClient(
     private val log: ProtocolLog = ProtocolLog.None,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val requestTimeoutMs: Long = 5000,
+    private val attentionTimeoutMs: Long = 2000,
     private val clock: () -> Long = System::nanoTime,
 ) {
     private class Session(val connection: CompanionConnection, val sessionId: Long) {
@@ -121,7 +124,36 @@ class CompanionClient(
         connected().request("_mcc", mapOf("_mcc" to MediaCommand.SKIP.code.toLong(), "_skpS" to seconds))
     }
 
-    suspend fun fetchAttentionState(): SystemStatus = parseStatus(connected().request("FetchAttentionState"))
+    /**
+     * The power state, or null when the TV does not answer. Some tvOS versions never reply, so this
+     * uses its own short timeout and never tears the connection down.
+     */
+    suspend fun fetchAttentionState(): SystemStatus? = fetchAttentionState(connected())
+
+    private suspend fun fetchAttentionState(connection: CompanionConnection): SystemStatus? =
+        withTimeoutOrNull(attentionTimeoutMs) { parseStatus(connection.request("FetchAttentionState")) }
+
+    /** Asks the TV about its keyboard; null when no text field is focused. */
+    suspend fun textInputState(): TextInputState? = textInputState(connected())
+
+    /**
+     * Types into the focused field. A fresh `_tiStart` gives the current session id; with [replace]
+     * the field is cleared first so the phone's text field stays the single source of truth.
+     */
+    suspend fun sendText(text: String, replace: Boolean) {
+        val connection = connected()
+        connection.request("_tiStop")
+        val state = textInputState(connection) ?: throw CompanionException.Protocol("no text field is focused on the Apple TV")
+        val session = state.sessionUuid ?: throw CompanionException.Protocol("keyboard session has no identifier")
+        if (replace) connection.event("_tiC", mapOf("_tiV" to 1L, "_tiD" to KeyedArchive.clearOperation(session)))
+        connection.event("_tiC", mapOf("_tiV" to 1L, "_tiD" to KeyedArchive.insertOperation(session, text)))
+    }
+
+    private suspend fun textInputState(connection: CompanionConnection): TextInputState? {
+        val reply = connection.request("_tiStart")
+        val archive = reply["_tiD"] as? ByteArray ?: return null
+        return KeyedArchive.parseState(archive)
+    }
 
     private suspend fun connected(): CompanionConnection = connectedSession().connection
 
@@ -150,12 +182,19 @@ class CompanionClient(
             current.forwarder = scope.launch { connection.events.collect { forward(it) } }
             session = current
 
+            // Registers with tvremoted; older tvOS rejects it, and the remote works either way.
+            try {
+                connection.request("TVRCSessionStart", mapOf("ProtocolVersionKey" to "1.2"))
+            } catch (e: CompanionException.Remote) {
+                log.log { "TVRCSessionStart rejected: ${e.remoteMessage}" }
+            }
+
             val textInput = connection.request("_tiStart")
-            if (textInput.containsKey("_tiD")) _events.tryEmit(CompanionEvent.TextInputStarted(textInput))
+            (textInput["_tiD"] as? ByteArray)?.let { _events.tryEmit(CompanionEvent.TextInputStarted(textInput, KeyedArchive.parseState(it))) }
             for (name in SUBSCRIBED_EVENTS) connection.event("_interest", mapOf("_regEvents" to listOf(name)))
-            val status = parseStatus(connection.request("FetchAttentionState"))
+            val status = fetchAttentionState(connection)
             _state.value = ConnectionState.Ready
-            _events.tryEmit(CompanionEvent.SystemStatusChanged(status))
+            if (status != null) _events.tryEmit(CompanionEvent.SystemStatusChanged(status))
             scope.launch { watchClose(current) }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -181,7 +220,7 @@ class CompanionClient(
         val typed = when (event.name) {
             "SystemStatus" -> CompanionEvent.SystemStatusChanged(parseStatus(event.content))
             "_iMC" -> CompanionEvent.MediaCapabilitiesChanged(MediaCapabilities.fromEvent(event.content))
-            "_tiStarted" -> CompanionEvent.TextInputStarted(event.content)
+            "_tiStarted" -> CompanionEvent.TextInputStarted(event.content, (event.content["_tiD"] as? ByteArray)?.let(KeyedArchive::parseState))
             "_tiStopped" -> CompanionEvent.TextInputStopped
             else -> CompanionEvent.Other(event.name, event.content)
         }

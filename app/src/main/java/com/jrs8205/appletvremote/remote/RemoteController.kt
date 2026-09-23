@@ -27,6 +27,7 @@ import com.jrs8205.appletvremote.protocol.crypto.SecureRandomSource
 import com.jrs8205.appletvremote.protocol.pairing.ControllerIdentity
 import com.jrs8205.appletvremote.protocol.pairing.Credentials
 import com.jrs8205.appletvremote.protocol.pairing.PairingException
+import com.jrs8205.appletvremote.protocol.textinput.TextInputState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +53,7 @@ data class RemoteState(
     val connection: ConnectionState = ConnectionState.Disconnected,
     val systemStatus: SystemStatus = SystemStatus.UNKNOWN,
     val media: MediaCapabilities = MediaCapabilities(0),
+    val keyboard: TextInputState? = null,
     val lastError: Throwable? = null,
 )
 
@@ -192,13 +194,23 @@ class RemoteController(
     }
 
     private suspend fun CompanionClient.togglePowerConnected() {
-        val status = fetchAttentionState()
-        val button = if (status == SystemStatus.ASLEEP || status == SystemStatus.UNKNOWN) HidButton.WAKE else HidButton.SLEEP
+        // A TV that answers our session is awake unless it told us otherwise, so an unknown state means sleep.
+        val status = fetchAttentionState() ?: _state.value.systemStatus
+        val button = if (status == SystemStatus.ASLEEP) HidButton.WAKE else HidButton.SLEEP
         pressButton(button)
         _state.update { it.copy(systemStatus = if (button == HidButton.WAKE) SystemStatus.AWAKE else SystemStatus.ASLEEP) }
     }
 
     fun touch(phase: TouchPhase, x: Int, y: Int) = touchPump.submit(TouchSample(phase, x, y))
+
+    /** Replaces the text in the focused field on the TV. */
+    fun sendText(text: String) = enqueue { sendText(text, replace = true) }
+
+    /** Asks the TV whether a text field is focused and updates [RemoteState.keyboard]. */
+    fun refreshKeyboard() = enqueue {
+        val state = textInputState()
+        _state.update { it.copy(keyboard = state) }
+    }
 
     fun connect() = enqueue { ensureConnected() }
 
@@ -302,6 +314,8 @@ class RemoteController(
                 when (event) {
                     is CompanionEvent.SystemStatusChanged -> _state.update { it.copy(systemStatus = event.status) }
                     is CompanionEvent.MediaCapabilitiesChanged -> _state.update { it.copy(media = event.capabilities) }
+                    is CompanionEvent.TextInputStarted -> _state.update { it.copy(keyboard = event.state ?: TextInputState(null, null, null)) }
+                    CompanionEvent.TextInputStopped -> _state.update { it.copy(keyboard = null) }
                     else -> Unit
                 }
             }
@@ -317,7 +331,7 @@ class RemoteController(
             eventJob?.cancel()
             eventJob = null
             stale.disconnect()
-            _state.update { it.copy(connection = ConnectionState.Disconnected, systemStatus = SystemStatus.UNKNOWN, media = MediaCapabilities(0)) }
+            _state.update { it.copy(connection = ConnectionState.Disconnected, systemStatus = SystemStatus.UNKNOWN, media = MediaCapabilities(0), keyboard = null) }
         }
     }
 

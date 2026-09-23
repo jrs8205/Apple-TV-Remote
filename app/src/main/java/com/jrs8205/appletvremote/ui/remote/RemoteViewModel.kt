@@ -26,4 +26,6 @@ class RemoteViewModel(private val container: AppContainer) : ViewModel() {
     fun skipBackward() = container.remoteController.skip(-settings.value.skipBackwardSeconds.toDouble())
     fun touch(phase: TouchPhase, x: Int, y: Int) = container.remoteController.touch(phase, x, y)
     fun connect() = container.remoteController.connect()
+    fun sendText(text: String) = container.remoteController.sendText(text)
+    fun refreshKeyboard() = container.remoteController.refreshKeyboard()
 }
