@@ -137,12 +137,15 @@ class RemoteController(
             while (true) {
                 try {
                     ensureConnected()
-                    return@enqueue
+                    break
                 } catch (e: CompanionException) {
                     if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
                     delay(WAKE_RETRY_DELAY_MS)
                 }
             }
+            // The TV accepts connections while dozing; a wake press lights the screen and is harmless when awake.
+            pressButton(HidButton.WAKE)
+            _state.update { it.copy(systemStatus = SystemStatus.AWAKE) }
         }
     }
 

@@ -99,4 +99,9 @@
     <string name="keyboard_no_field">Select a text field on the TV first.</string>
     <string name="keyboard_clear">Clear</string>
     <string name="keyboard_done">Done</string>
+
+    <string name="media_playing">Playing</string>
+    <string name="media_paused">Paused</string>
+    <string name="media_idle">Nothing playing</string>
+    <string name="tile_not_paired">Not paired</string>
 </resources>

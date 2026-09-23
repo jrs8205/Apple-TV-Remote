@@ -1,5 +1,9 @@
 package com.jrs8205.appletvremote.ui.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +59,10 @@ fun SettingsScreen(
     var confirmForget by remember { mutableStateOf(false) }
     var macText by remember { mutableStateOf("") }
     var wakeSent by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        viewModel.setMediaNotification(granted)
+    }
     LaunchedEffect(device?.macAddress) { macText = device?.macAddress ?: "" }
 
     Scaffold(
@@ -91,7 +100,10 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_media_controls),
                 subtitle = stringResource(R.string.settings_media_controls_hint),
                 checked = settings.mediaNotificationEnabled,
-                onChange = viewModel::setMediaNotification,
+                onChange = { enabled ->
+                    val granted = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    if (enabled && !granted) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.setMediaNotification(enabled)
+                },
             )
             SwitchRow(title = stringResource(R.string.settings_haptics), subtitle = null, checked = settings.hapticsEnabled, onChange = viewModel::setHaptics)
             HorizontalDivider()

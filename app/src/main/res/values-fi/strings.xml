@@ -99,4 +99,9 @@
     <string name="keyboard_no_field">Valitse ensin tekstikenttä TV:llä.</string>
     <string name="keyboard_clear">Tyhjennä</string>
     <string name="keyboard_done">Valmis</string>
+
+    <string name="media_playing">Toistetaan</string>
+    <string name="media_paused">Keskeytetty</string>
+    <string name="media_idle">Ei toistoa</string>
+    <string name="tile_not_paired">Ei paritettu</string>
 </resources>
