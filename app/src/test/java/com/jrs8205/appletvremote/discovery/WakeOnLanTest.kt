@@ -50,4 +50,21 @@ class WakeOnLanTest {
             assertArrayEquals(WakeOnLan.magicPacket("AA:BB:CC:DD:EE:FF"), buffer.copyOf(datagram.length))
         }
     }
+
+    @Test
+    fun reportsHowManyPacketsWentOut() {
+        DatagramSocket(0, InetAddress.getLoopbackAddress()).use { receiver ->
+            val result = WakeOnLan.send("AA:BB:CC:DD:EE:FF", listOf(InetAddress.getLoopbackAddress()), ports = listOf(receiver.localPort, receiver.localPort))
+            assertEquals(2, result.delivered)
+            assertTrue(result.failures.isEmpty())
+        }
+    }
+
+    @Test
+    fun reportsSendFailuresInsteadOfSwallowingThem() {
+        val result = WakeOnLan.send("AA:BB:CC:DD:EE:FF", listOf(InetAddress.getLoopbackAddress()), ports = listOf(9), bind = { it.close() })
+        assertEquals(0, result.delivered)
+        assertEquals(1, result.failures.size)
+        assertTrue(result.failures.single(), result.failures.single().contains("127.0.0.1:9"))
+    }
 }

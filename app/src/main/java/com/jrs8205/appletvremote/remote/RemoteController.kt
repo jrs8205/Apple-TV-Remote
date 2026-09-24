@@ -227,12 +227,19 @@ class RemoteController(
         if (macs.isNotEmpty()) {
             withContext(Dispatchers.IO) {
                 val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(settings.host) }.getOrNull())
+                var delivered = 0
+                val failures = LinkedHashSet<String>()
                 repeat(3) {
-                    for (mac in macs) runCatching { WakeOnLan.send(mac, targets, bind = networkTargets::bindToLan) }.onFailure { log.log { "LG wake-on-lan failed: $it" } }
+                    for (mac in macs) {
+                        runCatching { WakeOnLan.send(mac, targets, bind = networkTargets::bindToLan) }
+                            .onSuccess { failures += it.failures; delivered += it.delivered }
+                            .onFailure { failures += it.toString() }
+                    }
                     delay(250)
                 }
+                log.log { "sent wake-on-lan to the LG TV: ${macs.size} addresses, $delivered packets via ${targets.joinToString { it.hostAddress }}" }
+                failures.forEach { failure -> log.log { "wake-on-lan send failed: $failure" } }
             }
-            log.log { "sent wake-on-lan to the LG TV (${macs.size} addresses)" }
         }
         val deadline = System.currentTimeMillis() + LG_WAKE_TIMEOUT_MS
         var lastError: Exception? = null

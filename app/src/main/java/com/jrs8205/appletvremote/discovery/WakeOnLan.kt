@@ -41,17 +41,25 @@ object WakeOnLan {
         return packet
     }
 
+    /** How many datagrams left the phone, and what went wrong with the ones that did not. */
+    class SendResult(val delivered: Int, val failures: List<String>)
+
     /** Sends the packet to every given target (broadcast addresses and the last known unicast address). */
-    fun send(mac: String, targets: List<InetAddress>, ports: List<Int> = listOf(9, 7), bind: (DatagramSocket) -> Unit = {}) {
+    fun send(mac: String, targets: List<InetAddress>, ports: List<Int> = listOf(9, 7), bind: (DatagramSocket) -> Unit = {}): SendResult {
         val packet = magicPacket(mac)
+        var delivered = 0
+        val failures = ArrayList<String>()
         DatagramSocket().use { socket ->
             socket.broadcast = true
             bind(socket)
             for (target in targets) {
                 for (port in ports) {
                     runCatching { socket.send(DatagramPacket(packet, packet.size, target, port)) }
+                        .onSuccess { delivered++ }
+                        .onFailure { failures += "${target.hostAddress}:$port: $it" }
                 }
             }
         }
+        return SendResult(delivered, failures)
     }
 }
