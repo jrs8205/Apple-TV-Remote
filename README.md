@@ -1,5 +1,8 @@
 # Apple TV Remote
 
+[![Release](https://img.shields.io/github/v/release/jrs8205/Apple-TV-Remote)](https://github.com/jrs8205/Apple-TV-Remote/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/jrs8205/Apple-TV-Remote/total)](https://github.com/jrs8205/Apple-TV-Remote/releases)
+
 An open Android remote control for Apple TV. It talks to the Apple TV directly over the local
 network using the Companion Link protocol, so no account, cloud service or extra hardware is needed.
 
@@ -26,6 +29,15 @@ After that the power button on the remote turns the TV on, switches the input an
 
 The TV's certificate is pinned on pairing; if the TV ever presents a different one, pair again.
 
+## Installing
+
+Download the latest APK from the [Releases](https://github.com/jrs8205/Apple-TV-Remote/releases/latest)
+page and open it on the phone. Android asks once to allow installs from the browser or file
+manager.
+
+Requires Android 14 (API 34) or newer. On Android 17 the app asks for local network access,
+which it needs to discover and reach the Apple TV.
+
 ## Building
 
 Open the project in Android Studio or run:
@@ -43,9 +55,6 @@ gradlew.bat :app:testDebugUnitTest :app:lintDebug --console=plain
 A signed release needs a `keystore.properties` file at the project root with `storeFile`,
 `storePassword`, `keyAlias` and `keyPassword`; without it `assembleRelease` produces an unsigned
 APK. Neither the properties file nor the keystore belongs in version control.
-
-Requires Android 14 (API 34) or newer. On Android 17 the app asks for local network access,
-which it needs to discover and reach the Apple TV.
 
 ## License
 
