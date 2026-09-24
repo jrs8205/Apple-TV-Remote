@@ -60,7 +60,8 @@ class RemoteMediaService : MediaSessionService() {
                 .collect { (state, settings) ->
                     companionPlayer.update(state)
                     session?.setMediaButtonPreferences(skipButtons(state, settings.skipBackwardSeconds, settings.skipForwardSeconds))
-                    if (!settings.mediaNotificationEnabled || state.connection != ConnectionState.Ready) stopSelf()
+                    val wanted = settings.mediaNotificationEnabled && state.connection == ConnectionState.Ready && state.media.playState != PlayState.INACTIVE
+                    if (!wanted) stopSelf()
                 }
         }
     }

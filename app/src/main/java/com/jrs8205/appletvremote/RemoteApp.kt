@@ -1,6 +1,7 @@
 package com.jrs8205.appletvremote
 
 import android.app.Application
+import android.app.NotificationManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
@@ -62,6 +63,8 @@ class RemoteApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Swiping the app away kills the process before the media service can withdraw its notification.
+        getSystemService(NotificationManager::class.java)?.cancelAll()
         container = AppContainer(this)
         container.appScope.launch {
             combine(container.remoteController.state, container.settingsRepository.settings, foreground) { state, settings, visible ->
