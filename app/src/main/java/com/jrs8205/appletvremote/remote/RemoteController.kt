@@ -88,8 +88,6 @@ class RemoteController(
     private var eventJob: Job? = null
     private var backgroundDisconnect: Job? = null
     private var pairing: PendingPairing? = null
-    @Volatile private var lastWakeAt = 0L
-    private var macLearning: Job? = null
 
     private val commands = Channel<suspend CompanionClient.() -> Unit>(Channel.UNLIMITED)
     private val touchRecovery = AtomicBoolean(false)
@@ -148,31 +146,20 @@ class RemoteController(
 
     /**
      * The Apple TV picks a new port on every boot and may get a new address, so a failed connect
-     * first re-resolves it over mDNS. A TV that is not on the network at all gets a wake-up packet.
+     * re-resolves it over mDNS and repeats the command once. A TV that is asleep stays unreachable
+     * until the power button wakes it through the LG TV.
      */
     private suspend fun recover(command: suspend CompanionClient.() -> Unit) {
         val device = _state.value.device ?: return
-        val retry: suspend () -> Unit = {
-            val client = currentClient()
-            if (client != null) {
-                try {
-                    client.command()
-                    _state.update { it.copy(lastError = null) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    log.log { "command failed after recovery: $e" }
-                }
-            }
-        }
-        if (refreshAddress(device)) {
-            retry()
-            return
-        }
-        if (wakeIfPossible(throttleMs = AUTO_WAKE_THROTTLE_MS)) {
-            delay(WAKE_RETRY_DELAY_MS)
-            if (refreshAddress(device)) log.log { "address refreshed after wake" }
-            retry()
+        if (!refreshAddress(device)) return
+        val client = currentClient() ?: return
+        try {
+            client.command()
+            _state.update { it.copy(lastError = null) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.log { "command failed after recovery: $e" }
         }
     }
 
@@ -196,13 +183,10 @@ class RemoteController(
         null
     }
 
-    /** Sends Wake-on-LAN packets when the MAC address is known; returns false otherwise. */
-    fun wake(): Boolean = wakeIfPossible(throttleMs = 0)
-
     /**
-     * Wakes the chain: first the LG TV over the network (it switches to the Apple TV's HDMI input,
-     * which wakes the Apple TV through HDMI-CEC), then Wake-on-LAN to the Apple TV itself, then
-     * repeated connect attempts while everything boots.
+     * Wakes the chain: the LG TV is switched on over the network and told to select the Apple
+     * TV's HDMI input, which wakes the Apple TV through HDMI-CEC; then connect attempts repeat
+     * while everything boots.
      */
     fun wakeAndConnect() {
         val lg = lgTvRepository.settings
@@ -211,7 +195,6 @@ class RemoteController(
             try {
                 val settings = lg.first()
                 if (settings.enabled && settings.host.isNotBlank()) wakeThroughLgTv(settings)
-                wake()
                 var attempt = 0
                 // The address and port may change while the TV boots, so every attempt asks for the client afresh.
                 while (true) {
@@ -301,37 +284,6 @@ class RemoteController(
     private suspend fun LgTvClient.register(settings: LgTvSettings) {
         connect(settings.clientKey, timeoutMs = 15_000)
         if (settings.certificate == null) certificate?.let { lgTvRepository.setCertificate(it) }
-    }
-
-    /** While the TV is awake its AirPlay record carries the MAC address; grab it once so wake-up works later. */
-    private fun learnMacAddress(device: PairedDevice) {
-        if (macLearning?.isActive == true) return
-        macLearning = scope.launch {
-            val mac = discover(MAC_LEARN_TIMEOUT_MS) { list -> list.firstOrNull { it.serviceName == device.name }?.macAddress }
-            if (mac != null) {
-                log.log { "learned MAC address for ${device.name}" }
-                deviceRepository.setMacAddress(mac)
-            }
-        }
-    }
-
-    private fun wakeIfPossible(throttleMs: Long): Boolean {
-        val device = _state.value.device ?: return false
-        val mac = device.macAddress ?: return false
-        val now = System.currentTimeMillis()
-        if (now - lastWakeAt < throttleMs) return true
-        lastWakeAt = now
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                val targets = networkTargets.broadcastAddresses() + listOfNotNull(runCatching { InetAddress.getByName(device.host) }.getOrNull())
-                repeat(3) {
-                    runCatching { WakeOnLan.send(mac, targets, bind = networkTargets::bindToLan) }.onFailure { log.log { "wake-on-lan failed: $it" } }
-                    delay(250)
-                }
-                log.log { "sent wake-on-lan to $mac via ${targets.size} targets" }
-            }
-        }
-        return true
     }
 
     fun press(button: HidButton, holdMs: Long = 0) = enqueue { pressButton(button, holdMs) }
@@ -439,7 +391,7 @@ class RemoteController(
         }
         pending.connection.close()
         pairing = null
-        val device = PairedDevice(pending.device.serviceName, pending.device.host, pending.device.port, credentials, pending.device.macAddress)
+        val device = PairedDevice(pending.device.serviceName, pending.device.host, pending.device.port, credentials)
         dropClient()
         deviceRepository.save(device)
         _state.update { it.copy(device = device) }
@@ -475,10 +427,7 @@ class RemoteController(
         clientDevice = device
         eventJob = scope.launch {
             launch {
-                created.state.collect { connection ->
-                    _state.update { it.copy(connection = connection) }
-                    if (connection == ConnectionState.Ready && device.macAddress == null) learnMacAddress(device)
-                }
+                created.state.collect { connection -> _state.update { it.copy(connection = connection) } }
             }
             created.events.collect { event ->
                 when (event) {
@@ -507,10 +456,8 @@ class RemoteController(
 
     private companion object {
         const val BACKGROUND_DISCONNECT_MS = 30_000L
-        const val AUTO_WAKE_THROTTLE_MS = 30_000L
         const val WAKE_RETRY_DELAY_MS = 4_000L
         const val WAKE_CONNECT_ATTEMPTS = 6
-        const val MAC_LEARN_TIMEOUT_MS = 20_000L
         const val ADDRESS_REFRESH_MS = 6_000L
         const val LG_WAKE_TIMEOUT_MS = 90_000L
         const val LG_RETRY_DELAY_MS = 1_000L

@@ -28,10 +28,6 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setHaptics(enabled: Boolean) = viewModelScope.launch { container.settingsRepository.setHapticsEnabled(enabled) }
     fun setMediaNotification(enabled: Boolean) = viewModelScope.launch { container.settingsRepository.setMediaNotificationEnabled(enabled) }
     fun forgetDevice() = viewModelScope.launch { container.remoteController.forget() }
-    fun setMacAddress(text: String) = viewModelScope.launch {
-        container.deviceRepository.setMacAddress(if (text.isBlank()) null else WakeOnLan.normalizeMac(text))
-    }
-    fun wake(): Boolean = container.remoteController.wake()
 
     val lgTv: StateFlow<LgTvSettings> = container.lgTvRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LgTvSettings())

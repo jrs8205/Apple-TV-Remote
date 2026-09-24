@@ -6,20 +6,14 @@ import java.net.InetAddress
 
 /**
  * Wake-on-LAN: a UDP "magic packet" (6 × 0xFF followed by the MAC address 16 times) sent to the
- * broadcast address. An Apple TV on Ethernet wakes from deep sleep on it; over Wi-Fi it only works
- * when the device keeps wake-on-wireless active.
+ * broadcast address. Used to switch the LG TV on; the Apple TV itself ignores these packets, so
+ * it is woken through HDMI-CEC instead.
  */
 object WakeOnLan {
 
     private val macPattern = Regex("^([0-9A-Fa-f]{2})([:-]?)([0-9A-Fa-f]{2})(\\2[0-9A-Fa-f]{2}){4}$")
 
     fun isValidMac(text: String): Boolean = macPattern.matches(text.trim())
-
-    /** Randomized addresses (second-least-significant bit of the first byte set) never belong to a physical port. */
-    fun isLocallyAdministered(mac: String): Boolean {
-        val first = normalizeMac(mac)?.substring(0, 2)?.toInt(16) ?: return false
-        return first and 0x02 != 0
-    }
 
     /** Accepts one or more MAC addresses separated by commas or spaces; null when any of them is malformed. */
     fun normalizeMacList(text: String): String? {

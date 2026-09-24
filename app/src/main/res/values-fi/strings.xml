@@ -87,12 +87,6 @@
     <string name="settings_haptics">Värinäpalaute</string>
     <string name="settings_hid_probe">HID-koodien testi</string>
 
-    <string name="settings_mac_label">MAC-osoite herätystä varten</string>
-    <string name="settings_mac_hint">Haetaan automaattisesti AirPlaysta, kun TV on hereillä. Voit myös kopioida sen Apple TV:n kohdasta Asetukset, Yleiset, Tietoja.</string>
-    <string name="settings_wake_now">Herätä Apple TV</string>
-    <string name="settings_wake_hint">Lähettää Wake-on-LAN-paketin. Toimii Ethernetillä ja monissa Wi-Fi-kokoonpanoissa.</string>
-    <string name="settings_wake_sent">Herätyspaketti lähetetty. Käynnistyminen voi kestää puoli minuuttia.</string>
-    <string name="settings_wake_no_mac">Syötä ensin MAC-osoite.</string>
 
     <string name="keyboard_title">Kirjoita Apple TV:lle</string>
     <string name="keyboard_hint">Teksti lähetetään TV:llä valittuun kenttään.</string>

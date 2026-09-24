@@ -18,7 +18,6 @@ data class DiscoveredDevice(
     val port: Int,
     val model: String,
     val network: Network?,
-    val macAddress: String? = null,
 )
 
 /** Browses `_companion-link._tcp` and keeps a list of Apple TVs with a usable IPv4 address. */
@@ -34,41 +33,11 @@ class NsdDiscovery(context: Context) {
             acquire()
         }
         val found = LinkedHashMap<String, DiscoveredDevice>()
-        val macByName = HashMap<String, String>()
         val callbacks = HashMap<String, NsdManager.ServiceInfoCallback>()
 
         fun publish() {
-            val devices = synchronized(found) {
-                found.values.map { device -> macByName[device.serviceName]?.let { device.copy(macAddress = it) } ?: device }
-            }
+            val devices = synchronized(found) { found.values.toList() }
             trySend(devices)
-        }
-
-        val airplayListener = object : NsdManager.DiscoveryListener {
-            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
-            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
-            override fun onDiscoveryStarted(serviceType: String) = Unit
-            override fun onDiscoveryStopped(serviceType: String) = Unit
-            override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
-
-            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                val key = "airplay:" + serviceInfo.serviceName
-                if (callbacks.containsKey(key)) return
-                val callback = object : NsdManager.ServiceInfoCallback {
-                    override fun onServiceUpdated(info: NsdServiceInfo) {
-                        val mac = info.attributes["deviceid"]?.toString(Charsets.UTF_8)?.let(WakeOnLan::normalizeMac) ?: return
-                        if (WakeOnLan.isLocallyAdministered(mac)) return
-                        synchronized(found) { macByName[info.serviceName] = mac }
-                        publish()
-                    }
-
-                    override fun onServiceLost() = Unit
-                    override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) = Unit
-                    override fun onServiceInfoCallbackUnregistered() = Unit
-                }
-                callbacks[key] = callback
-                nsdManager.registerServiceInfoCallback(serviceInfo, executor, callback)
-            }
         }
 
         val discoveryListener = object : NsdManager.DiscoveryListener {
@@ -117,12 +86,10 @@ class NsdDiscovery(context: Context) {
         }
 
         nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
-        nsdManager.discoverServices(AIRPLAY_TYPE, NsdManager.PROTOCOL_DNS_SD, airplayListener)
         publish()
 
         awaitClose {
             runCatching { nsdManager.stopServiceDiscovery(discoveryListener) }
-            runCatching { nsdManager.stopServiceDiscovery(airplayListener) }
             callbacks.values.forEach { runCatching { nsdManager.unregisterServiceInfoCallback(it) } }
             lock?.let { if (it.isHeld) it.release() }
         }
@@ -140,7 +107,6 @@ class NsdDiscovery(context: Context) {
     private companion object {
         const val TAG = "NsdDiscovery"
         const val SERVICE_TYPE = "_companion-link._tcp."
-        const val AIRPLAY_TYPE = "_airplay._tcp."
         const val LOCK_TAG = "appletvremote-nsd"
     }
 }

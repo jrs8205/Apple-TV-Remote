@@ -58,14 +58,10 @@ fun SettingsScreen(
     val device by viewModel.device.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var confirmForget by remember { mutableStateOf(false) }
-    var macText by remember { mutableStateOf("") }
-    var wakeSent by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.setMediaNotification(granted)
     }
-    LaunchedEffect(device?.macAddress) { macText = device?.macAddress ?: "" }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -115,32 +111,6 @@ fun SettingsScreen(
                 headlineContent = { Text(device?.name ?: stringResource(R.string.settings_not_paired)) },
                 supportingContent = { device?.let { Text(it.host) } },
             )
-            if (device != null) {
-                OutlinedTextField(
-                    value = macText,
-                    onValueChange = { macText = it; if (it.isBlank() || WakeOnLan.isValidMac(it)) viewModel.setMacAddress(it) },
-                    label = { Text(stringResource(R.string.settings_mac_label)) },
-                    supportingText = { Text(stringResource(R.string.settings_mac_hint)) },
-                    isError = macText.isNotBlank() && !WakeOnLan.isValidMac(macText),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.settings_wake_now)) },
-                    supportingContent = {
-                        Text(
-                            when {
-                                wakeSent -> stringResource(R.string.settings_wake_sent)
-                                device?.macAddress == null -> stringResource(R.string.settings_wake_no_mac)
-                                else -> stringResource(R.string.settings_wake_hint)
-                            },
-                        )
-                    },
-                    modifier = Modifier.clickable { wakeSent = viewModel.wake() },
-                )
-            }
             ListItem(headlineContent = { Text(stringResource(R.string.settings_pair_another)) }, modifier = Modifier.clickable(onClick = onPairAnother))
             if (device != null) {
                 ListItem(headlineContent = { Text(stringResource(R.string.settings_unpair)) }, modifier = Modifier.clickable { confirmForget = true })

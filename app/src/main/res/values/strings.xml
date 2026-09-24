@@ -87,12 +87,6 @@
     <string name="settings_haptics">Haptic feedback</string>
     <string name="settings_hid_probe">HID code test</string>
 
-    <string name="settings_mac_label">MAC address for wake-up</string>
-    <string name="settings_mac_hint">Picked up automatically from AirPlay while the TV is awake. You can also copy it from Settings, General, About on the Apple TV.</string>
-    <string name="settings_wake_now">Wake the Apple TV</string>
-    <string name="settings_wake_hint">Sends a Wake-on-LAN packet. Works over Ethernet and on many Wi-Fi setups.</string>
-    <string name="settings_wake_sent">Wake-up packet sent. Booting can take up to half a minute.</string>
-    <string name="settings_wake_no_mac">Enter the MAC address first.</string>
 
     <string name="keyboard_title">Type on the Apple TV</string>
     <string name="keyboard_hint">Text is sent to the field selected on the TV.</string>

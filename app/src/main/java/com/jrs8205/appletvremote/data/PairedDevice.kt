@@ -9,7 +9,6 @@ class PairedDevice(
     val host: String,
     val port: Int,
     val credentials: Credentials,
-    val macAddress: String? = null,
 ) {
     /** True when both describe the same pairing at the same address, regardless of object identity. */
     fun sameAs(other: PairedDevice?): Boolean =
@@ -34,7 +33,6 @@ data class StoredDevice(
     val wrappedSeed: String,
     val accessoryIdHex: String,
     val accessoryPublicKeyHex: String,
-    val macAddress: String? = null,
 )
 
 class PairedDeviceCodec(private val cipher: SecretCipher) {
@@ -48,7 +46,6 @@ class PairedDeviceCodec(private val cipher: SecretCipher) {
         wrappedSeed = cipher.wrap(device.credentials.controller.signingKey.seed),
         accessoryIdHex = device.credentials.accessoryId.toHexString(),
         accessoryPublicKeyHex = device.credentials.accessoryPublicKey.toHexString(),
-        macAddress = device.macAddress,
     )
 
     /** Returns null when the stored data cannot be turned back into usable credentials. */
@@ -63,7 +60,6 @@ class PairedDeviceCodec(private val cipher: SecretCipher) {
             host = stored.host,
             port = stored.port,
             credentials = Credentials(identity, stored.accessoryIdHex.hexToByteArray(), stored.accessoryPublicKeyHex.hexToByteArray()),
-            macAddress = stored.macAddress,
         )
     } catch (_: Exception) {
         null
