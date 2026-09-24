@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.jrs8205.appletvremote.AppContainer
 import com.jrs8205.appletvremote.discovery.DiscoveredDevice
 import com.jrs8205.appletvremote.protocol.pairing.PairingException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,9 +30,12 @@ class PairingViewModel(private val container: AppContainer) : ViewModel() {
     private val _state = MutableStateFlow<PairingUiState>(PairingUiState.Scanning(emptyList()))
     val state: StateFlow<PairingUiState> = _state.asStateFlow()
     private var scanJob: Job? = null
+    private var pairingJob: Job? = null
 
+    /** Starts the search unless a pairing is under way: a rotation re-enters here and must not throw away the PIN entry. */
     fun startScanning() {
         if (scanJob?.isActive == true) return
+        if (_state.value !is PairingUiState.Scanning) return
         _state.value = PairingUiState.Scanning(emptyList())
         scanJob = viewModelScope.launch {
             container.discovery.devices()
@@ -47,11 +51,15 @@ class PairingViewModel(private val container: AppContainer) : ViewModel() {
 
     fun select(device: DiscoveredDevice) {
         stopScanning()
+        val previous = abandonPairing()
         _state.value = PairingUiState.Connecting(device)
-        viewModelScope.launch {
+        pairingJob = viewModelScope.launch {
+            previous.join()
             try {
                 container.remoteController.startPairing(device)
                 _state.value = PairingUiState.EnterPin(device)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 container.connectionLog.log { "pairing start failed: $e" }
                 _state.value = PairingUiState.Failed(device, e.toPairingError())
@@ -84,13 +92,34 @@ class PairingViewModel(private val container: AppContainer) : ViewModel() {
         select(device)
     }
 
+    /** The screen has moved on to the remote; the next visit starts with a fresh search. */
+    fun acknowledgeDone() {
+        if (_state.value is PairingUiState.Done) _state.value = PairingUiState.Scanning(emptyList())
+    }
+
     fun cancel() {
-        viewModelScope.launch { container.remoteController.cancelPairing() }
+        abandonPairing()
+        _state.value = PairingUiState.Scanning(emptyList())
         startScanning()
     }
 
     override fun onCleared() {
-        viewModelScope.launch { container.remoteController.cancelPairing() }
+        abandonPairing()
+    }
+
+    /**
+     * Stops an in-flight pairing and closes its connection. The cleanup runs in the application
+     * scope because [viewModelScope] is already cancelled by the time [onCleared] runs, and it
+     * waits for the pairing job so a late result cannot outlive the cancellation.
+     */
+    private fun abandonPairing(): Job {
+        val job = pairingJob
+        pairingJob = null
+        job?.cancel()
+        return container.appScope.launch {
+            job?.join()
+            container.remoteController.cancelPairing()
+        }
     }
 
     private fun Throwable.toPairingError(): PairingError = when (this) {

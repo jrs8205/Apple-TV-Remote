@@ -2,6 +2,7 @@ package com.jrs8205.appletvremote.lgtv
 
 import com.jrs8205.appletvremote.protocol.log.ProtocolLog
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -10,10 +11,10 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import javax.net.SocketFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
@@ -21,17 +22,27 @@ class LgTvException(message: String) : RuntimeException(message)
 
 /**
  * One WebSocket session with an LG webOS TV. Newer sets only accept `wss` on port 3001 with a
- * self-signed certificate, so the socket trusts whatever certificate the configured host presents.
+ * self-signed certificate, so trust is pinned to the key seen when pairing: [pinnedCertificate] is
+ * that SPKI SHA-256, or null to accept whatever the TV presents and report it as [certificate].
+ * [socketFactory] keeps the connection on the LAN when the phone's default route is mobile data.
  */
 class LgTvClient(
     private val host: String,
     private val log: ProtocolLog = ProtocolLog.None,
+    pinnedCertificate: String? = null,
+    socketFactory: SocketFactory? = null,
+    private val port: Int = 3001,
+    private val openTimeoutMs: Long = 4_000,
+    handshakeTimeoutMs: Long = 5_000,
 ) : AutoCloseable {
 
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .sslSocketFactory(trustingContext().socketFactory, TRUST_ALL)
+    private val trust = LgTvTrust(pinnedCertificate)
+    private val http = shared.newBuilder()
+        .apply { if (socketFactory != null) socketFactory(socketFactory) }
+        // Bounds the TLS and upgrade handshake only: OkHttp lifts the read timeout once the socket is a WebSocket.
+        .readTimeout(handshakeTimeoutMs, TimeUnit.MILLISECONDS)
+        .sslSocketFactory(sslContext(trust).socketFactory, trust)
+        // The pin identifies the TV; its self-signed certificate carries no usable host name.
         .hostnameVerifier { _, _ -> true }
         .build()
 
@@ -42,6 +53,9 @@ class LgTvClient(
     @Volatile private var socket: WebSocket? = null
     @Volatile private var pairingPrompted: (() -> Unit)? = null
 
+    /** SPKI SHA-256 of the certificate the TV presented, once connected. */
+    val certificate: String? get() = trust.seen
+
     /**
      * Connects and registers. With a stored [clientKey] this completes silently; without one the
      * TV shows a prompt, [onPrompt] fires, and the returned key must be stored for next time.
@@ -51,9 +65,8 @@ class LgTvClient(
         open()
         val id = "register_${ids.getAndIncrement()}"
         val reply = exchange(id, LgTvMessages.register(id, clientKey), timeoutMs)
-        val key = reply.payload?.optString("client-key")?.takeIf { it.isNotEmpty() }
+        return reply.payload?.optString("client-key")?.takeIf { it.isNotEmpty() }
             ?: throw LgTvException("TV did not return a client key (${reply.error ?: reply.type})")
-        return key
     }
 
     suspend fun switchInput(inputId: String) {
@@ -81,22 +94,41 @@ class LgTvClient(
     }
 
     override fun close() {
-        socket?.close(1000, null)
+        val current = socket ?: return
         socket = null
+        if (opened.isCompleted) current.close(1000, null) else current.cancel()
     }
 
     private suspend fun open() {
         if (socket != null) return
-        val request = Request.Builder().url("wss://$host:3001/").build()
-        socket = http.newWebSocket(request, Listener())
-        val result = withTimeoutOrNull(4_000) {
-            kotlinx.coroutines.selects.select {
-                opened.onAwait { null }
-                closed.onAwait { it }
+        val request = Request.Builder().url("wss://$host:$port/").build()
+        val current = http.newWebSocket(request, Listener())
+        socket = current
+        var established = false
+        try {
+            val failure = withTimeoutOrNull(openTimeoutMs) {
+                select {
+                    opened.onAwait { null }
+                    closed.onAwait { it }
+                }
+            }
+            established = failure == null && opened.isCompleted
+            if (!established) {
+                throw LgTvException(
+                    when {
+                        trust.rejected -> "the TV's certificate changed; pair with it again"
+                        failure != null -> "could not reach the TV: $failure"
+                        else -> "could not reach the TV: timeout"
+                    },
+                )
+            }
+        } finally {
+            // Without this a half-open handshake keeps its thread and socket until OkHttp gives up on its own.
+            if (!established) {
+                current.cancel()
+                socket = null
             }
         }
-        if (result != null) throw LgTvException("could not reach the TV: $result")
-        if (result == null && !opened.isCompleted) throw LgTvException("could not reach the TV: timeout")
     }
 
     private suspend fun exchange(id: String, message: String, timeoutMs: Long): LgTvMessages.Incoming {
@@ -138,12 +170,9 @@ class LgTvClient(
     }
 
     private companion object {
-        val TRUST_ALL = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        }
+        /** One dispatcher and connection pool for every session; TLS trust differs per TV, so each instance derives its own client. */
+        val shared: OkHttpClient by lazy { OkHttpClient.Builder().connectTimeout(2, TimeUnit.SECONDS).build() }
 
-        fun trustingContext(): SSLContext = SSLContext.getInstance("TLS").apply { init(null, arrayOf(TRUST_ALL), SecureRandom()) }
+        fun sslContext(trust: X509TrustManager): SSLContext = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), SecureRandom()) }
     }
 }

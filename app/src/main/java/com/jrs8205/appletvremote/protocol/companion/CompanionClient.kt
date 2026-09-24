@@ -74,15 +74,19 @@ class CompanionClient(
                 return
             }
             val connection = current.connection
-            if (connection.isOpen) {
-                for (name in SUBSCRIBED_EVENTS) softly { connection.event("_interest", mapOf("_deregEvents" to listOf(name))) }
-                softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_sessionStop", sessionArguments(current.sessionId)) } }
-                softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_tiStop") } }
-                if (current.touchStartedAt != null) softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_touchStop") } }
+            try {
+                if (connection.isOpen) {
+                    for (name in SUBSCRIBED_EVENTS) softly { connection.event("_interest", mapOf("_deregEvents" to listOf(name))) }
+                    softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_sessionStop", sessionArguments(current.sessionId)) } }
+                    softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_tiStop") } }
+                    if (current.touchStartedAt != null) softly { withTimeoutOrNull(TEARDOWN_STEP_MS) { connection.request("_touchStop") } }
+                }
+            } finally {
+                // The session is already gone, so the socket must go too, even when the caller was cancelled mid-teardown.
+                withContext(NonCancellable) { connection.close() }
+                current.forwarder?.cancel()
+                _state.value = ConnectionState.Disconnected
             }
-            connection.close()
-            current.forwarder?.cancel()
-            _state.value = ConnectionState.Disconnected
         }
     }
 

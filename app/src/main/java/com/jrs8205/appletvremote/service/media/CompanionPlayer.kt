@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.jrs8205.appletvremote.protocol.companion.ConnectionState
@@ -19,6 +20,7 @@ import com.jrs8205.appletvremote.remote.RemoteState
  * A player that never plays anything itself: it mirrors what the Apple TV reports through `_iMC`
  * and forwards transport and volume commands, so the system media controls can drive the TV.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class CompanionPlayer(
     private val controller: RemoteController,
     private val statusText: (RemoteState) -> String,
@@ -78,6 +80,7 @@ class CompanionPlayer(
         when (seekCommand) {
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> controller.media(MediaCommand.NEXT)
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> controller.media(MediaCommand.PREVIOUS)
+            else -> Unit
         }
         return Futures.immediateVoidFuture()
     }

@@ -40,8 +40,8 @@ object Opack {
                 is Long -> writeInt(value)
                 is Float -> writeDouble(0x36, value.toDouble())
                 is Double -> writeDouble(0x36, value)
-                is String -> writeSized(value.toByteArray(Charsets.UTF_8), 0x40, 0x60)
-                is ByteArray -> writeSized(value, 0x70, 0x90)
+                is String -> writeString(value.toByteArray(Charsets.UTF_8))
+                is ByteArray -> writeBytes(value)
                 is UUID -> writeUuid(value)
                 is OpackDate -> writeDouble(0x06, value.secondsSince2001)
                 is List<*> -> writeContainer(value.size, 0xD0) { value.forEach { write(it) } }
@@ -70,14 +70,26 @@ object Opack {
             writeLittleEndian(java.lang.Double.doubleToLongBits(value), 8)
         }
 
-        private fun writeSized(data: ByteArray, inlineBase: Int, prefixedBase: Int) {
+        private fun writeString(data: ByteArray) {
             val length = data.size
             when {
-                length <= 32 -> out.write(inlineBase + length)
-                length <= 0xFF -> { out.write(prefixedBase + 1); writeLittleEndian(length.toLong(), 1) }
-                length <= 0xFFFF -> { out.write(prefixedBase + 2); writeLittleEndian(length.toLong(), 2) }
-                length <= 0xFF_FFFF -> { out.write(prefixedBase + 3); writeLittleEndian(length.toLong(), 3) }
-                else -> { out.write(prefixedBase + 4); writeLittleEndian(length.toLong(), 4) }
+                length <= 32 -> out.write(0x40 + length)
+                length <= 0xFF -> { out.write(0x61); writeLittleEndian(length.toLong(), 1) }
+                length <= 0xFFFF -> { out.write(0x62); writeLittleEndian(length.toLong(), 2) }
+                length <= 0xFF_FFFF -> { out.write(0x63); writeLittleEndian(length.toLong(), 3) }
+                else -> { out.write(0x64); writeLittleEndian(length.toLong(), 4) }
+            }
+            out.write(data)
+        }
+
+        /** Byte arrays carry 1, 2, 4 or 8 length bytes, not the 1..4 of strings. */
+        private fun writeBytes(data: ByteArray) {
+            val length = data.size
+            when {
+                length <= 32 -> out.write(0x70 + length)
+                length <= 0xFF -> { out.write(0x91); writeLittleEndian(length.toLong(), 1) }
+                length <= 0xFFFF -> { out.write(0x92); writeLittleEndian(length.toLong(), 2) }
+                else -> { out.write(0x93); writeLittleEndian(length.toLong(), 4) }
             }
             out.write(data)
         }
@@ -129,7 +141,7 @@ object Opack {
                 tag in 0x61..0x64 -> remember(String(take(readLength(tag - 0x60)), Charsets.UTF_8))
                 tag == 0x6F -> remember(readNullTerminatedString())
                 tag in 0x70..0x90 -> remember(take(tag - 0x70))
-                tag in 0x91..0x94 -> remember(take(readLength(tag - 0x90)))
+                tag in 0x91..0x94 -> remember(take(readLength(1 shl (tag - 0x91))))
                 tag in 0xA0..0xC0 -> reference(tag - 0xA0)
                 tag in 0xC1..0xC4 -> reference(readLength(tag - 0xC0))
                 tag in 0xD0..0xDE -> readList(tag - 0xD0)
@@ -227,7 +239,7 @@ object Opack {
         }
 
         private fun take(count: Int): ByteArray {
-            if (count < 0 || position + count > bytes.size) {
+            if (count < 0 || count > bytes.size - position) {
                 throw OpackException("unexpected end of data: need $count bytes at offset $position, have ${bytes.size - position}")
             }
             val slice = bytes.copyOfRange(position, position + count)

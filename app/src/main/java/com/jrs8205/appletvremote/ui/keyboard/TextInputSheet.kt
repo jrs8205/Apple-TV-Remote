@@ -50,17 +50,36 @@ fun TextInputSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var text by remember { mutableStateOf(keyboard?.currentText ?: "") }
     var lastSent by remember { mutableStateOf(keyboard?.currentText ?: "") }
+    var primed by remember { mutableStateOf(keyboard != null) }
     val focus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         onRefresh()
         focus.requestFocus()
     }
+    // Opened before the TV answered: adopt its text once, unless the user has already started typing.
+    LaunchedEffect(keyboard) {
+        if (primed || keyboard == null) return@LaunchedEffect
+        primed = true
+        if (text.isEmpty()) {
+            text = keyboard.currentText ?: ""
+            lastSent = text
+        }
+    }
     LaunchedEffect(text) {
         if (text == lastSent) return@LaunchedEffect
         delay(SEND_DEBOUNCE_MS)
+        if (text == lastSent) return@LaunchedEffect
         lastSent = text
         onSend(text)
+    }
+    // Text still waiting on the debounce must reach the TV before the selection that may close its field.
+    val done = {
+        if (text != lastSent) {
+            lastSent = text
+            onSend(text)
+        }
+        onPress(HidButton.SELECT)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -82,7 +101,7 @@ fun TextInputSheet(
                 onValueChange = { text = it },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onPress(HidButton.SELECT) }),
+                keyboardActions = KeyboardActions(onDone = { done() }),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focus),
@@ -90,7 +109,7 @@ fun TextInputSheet(
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { text = "" }) { Text(stringResource(R.string.keyboard_clear)) }
-                TextButton(onClick = { onPress(HidButton.SELECT) }) { Text(stringResource(R.string.keyboard_done)) }
+                TextButton(onClick = done) { Text(stringResource(R.string.keyboard_done)) }
             }
         }
     }

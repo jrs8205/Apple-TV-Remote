@@ -139,6 +139,8 @@ data class LgTvSettings(
     val macAddress: String? = null,
     val clientKey: String? = null,
     val inputId: String = "HDMI_1",
+    /** SPKI SHA-256 of the TV's certificate, learned when pairing; later connections accept only this key. */
+    val certificate: String? = null,
 )
 
 /** The LG webOS TV that the Apple TV hangs off, used only to wake the chain over HDMI-CEC. */
@@ -151,6 +153,7 @@ class LgTvRepository(private val dataStore: DataStore<Preferences>) {
             macAddress = prefs[MAC],
             clientKey = prefs[CLIENT_KEY],
             inputId = prefs[INPUT] ?: "HDMI_1",
+            certificate = prefs[CERTIFICATE],
         )
     }
 
@@ -159,6 +162,7 @@ class LgTvRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setMacAddress(mac: String?) = dataStore.edit { if (mac.isNullOrBlank()) it.remove(MAC) else it[MAC] = mac }
     suspend fun setClientKey(key: String?) = dataStore.edit { if (key.isNullOrBlank()) it.remove(CLIENT_KEY) else it[CLIENT_KEY] = key }
     suspend fun setInputId(inputId: String) = dataStore.edit { it[INPUT] = inputId }
+    suspend fun setCertificate(spkiSha256: String?) = dataStore.edit { if (spkiSha256.isNullOrBlank()) it.remove(CERTIFICATE) else it[CERTIFICATE] = spkiSha256 }
 
     private companion object {
         val ENABLED = booleanPreferencesKey("lg_enabled")
@@ -166,6 +170,7 @@ class LgTvRepository(private val dataStore: DataStore<Preferences>) {
         val MAC = stringPreferencesKey("lg_mac")
         val CLIENT_KEY = stringPreferencesKey("lg_client_key")
         val INPUT = stringPreferencesKey("lg_input")
+        val CERTIFICATE = stringPreferencesKey("lg_certificate")
     }
 }
 

@@ -96,6 +96,34 @@ class OpackTest {
     }
 
     @Test
+    fun byteArrayLengthWidthsAreOneTwoFourAndEightBytes() {
+        val b65536 = ByteArray(65536) { 1 }
+        val encoded = Opack.encode(b65536)
+        assertArrayEquals(bytes(0x93, 0x00, 0x00, 0x01, 0x00), encoded.copyOfRange(0, 5))
+        assertArrayEquals(b65536, Opack.decode(encoded) as ByteArray)
+        assertArrayEquals(bytes(5, 6), Opack.decode(bytes(0x93, 0x02, 0, 0, 0, 5, 6)) as ByteArray)
+        assertArrayEquals(bytes(7), Opack.decode(bytes(0x94, 0x01, 0, 0, 0, 0, 0, 0, 0, 7)) as ByteArray)
+    }
+
+    @Test
+    fun stringLengthWidthsAreOneToFourBytes() {
+        val s65536 = "c".repeat(65536)
+        val encoded = Opack.encode(s65536)
+        assertArrayEquals(bytes(0x63, 0x00, 0x00, 0x01), encoded.copyOfRange(0, 4))
+        assertEquals(s65536, Opack.decode(encoded))
+        assertEquals("ab", Opack.decode(bytes(0x64, 0x02, 0, 0, 0, 'a'.code, 'b'.code)))
+    }
+
+    @Test
+    fun rejectsLengthsBeyondTheInputWithoutOverflowing() {
+        assertThrows(OpackException::class.java) { Opack.decode(bytes(0x64, 0xFF, 0xFF, 0xFF, 0x7F)) }
+        assertThrows(OpackException::class.java) { Opack.decode(bytes(0x93, 0xFF, 0xFF, 0xFF, 0x7F)) }
+        assertThrows(OpackException::class.java) { Opack.decode(bytes(0x93, 0xFF, 0xFF, 0xFF, 0xFF)) }
+        assertThrows(OpackException::class.java) { Opack.decode(bytes(0x94, 0, 0, 0, 0, 0, 0, 0, 0x80)) }
+        assertThrows(OpackException::class.java) { Opack.decode(bytes(0xD1, 0x93, 0xFF, 0xFF, 0xFF, 0x7F)) }
+    }
+
+    @Test
     fun encodesUuidBigEndian() {
         val uuid = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff")
         val expected = bytes(

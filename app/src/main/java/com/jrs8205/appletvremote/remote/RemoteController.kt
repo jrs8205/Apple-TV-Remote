@@ -35,6 +35,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class RemoteState(
     val device: PairedDevice? = null,
@@ -90,7 +92,25 @@ class RemoteController(
     private var macLearning: Job? = null
 
     private val commands = Channel<suspend CompanionClient.() -> Unit>(Channel.UNLIMITED)
-    private val touchPump = TouchPump(scope) { sample -> currentClient()?.touch(sample.phase, sample.x, sample.y) }
+    private val touchRecovery = AtomicBoolean(false)
+    private val touchPump = TouchPump(scope) { sample ->
+        val active = currentClient() ?: return@TouchPump
+        try {
+            active.touch(sample.phase, sample.x, sample.y)
+        } catch (e: CompanionException.ConnectionClosed) {
+            // Touch samples bypass the command queue, so a dead connection is handed to it for address recovery.
+            if (touchRecovery.compareAndSet(false, true)) {
+                enqueue {
+                    try {
+                        ensureConnected()
+                    } finally {
+                        touchRecovery.set(false)
+                    }
+                }
+            }
+            throw e
+        }
+    }
 
     private class PendingPairing(val device: DiscoveredDevice, val identity: ControllerIdentity, val connection: CompanionConnection, val session: PairingSession)
 
@@ -112,7 +132,15 @@ class RemoteController(
                 } catch (e: Exception) {
                     log.log { "command failed: $e" }
                     _state.update { it.copy(lastError = e) }
-                    if (e is CompanionException.ConnectionClosed) recover(command)
+                    if (e is CompanionException.ConnectionClosed) {
+                        try {
+                            recover(command)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            log.log { "recovery failed: $e" }
+                        }
+                    }
                 }
             }
         }
@@ -150,14 +178,22 @@ class RemoteController(
 
     /** Looks the TV up by name for a few seconds; stores and returns true when its address or port changed. */
     private suspend fun refreshAddress(device: PairedDevice): Boolean {
-        val found = withTimeoutOrNull(ADDRESS_REFRESH_MS) {
-            discovery.devices().mapNotNull { list -> list.firstOrNull { it.serviceName == device.name } }.first()
-        } ?: return false
+        val found = discover(ADDRESS_REFRESH_MS) { list -> list.firstOrNull { it.serviceName == device.name } } ?: return false
         if (found.host == device.host && found.port == device.port) return false
         log.log { "address changed to ${found.host}:${found.port}" }
         deviceRepository.updateAddress(found.host, found.port)
         withTimeoutOrNull(2000) { _state.first { it.device?.host == found.host && it.device?.port == found.port } }
         return true
+    }
+
+    /** Watches discovery for up to [timeoutMs] until [pick] yields a value; null on timeout or when discovery cannot start. */
+    private suspend fun <T : Any> discover(timeoutMs: Long, pick: (List<DiscoveredDevice>) -> T?): T? = try {
+        withTimeoutOrNull(timeoutMs) { discovery.devices().mapNotNull(pick).first() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.log { "discovery failed: $e" }
+        null
     }
 
     /** Sends Wake-on-LAN packets when the MAC address is known; returns false otherwise. */
@@ -177,9 +213,10 @@ class RemoteController(
                 if (settings.enabled && settings.host.isNotBlank()) wakeThroughLgTv(settings)
                 wake()
                 var attempt = 0
+                // The address and port may change while the TV boots, so every attempt asks for the client afresh.
                 while (true) {
                     try {
-                        ensureConnected()
+                        requireClient().ensureConnected()
                         break
                     } catch (e: CompanionException) {
                         if (++attempt >= WAKE_CONNECT_ATTEMPTS) throw e
@@ -187,7 +224,7 @@ class RemoteController(
                         refreshAddress(_state.value.device ?: throw e)
                     }
                 }
-                pressButton(HidButton.WAKE)
+                requireClient().pressButton(HidButton.WAKE)
                 _state.update { it.copy(systemStatus = SystemStatus.AWAKE) }
             } finally {
                 _state.update { it.copy(wakingTv = false) }
@@ -212,8 +249,8 @@ class RemoteController(
         var lastError: Exception? = null
         while (System.currentTimeMillis() < deadline) {
             try {
-                LgTvClient(settings.host, log).use { client ->
-                    client.connect(settings.clientKey, timeoutMs = 15_000)
+                lgTvClient(settings).use { client ->
+                    client.register(settings)
                     client.switchInput(settings.inputId)
                 }
                 log.log { "LG TV switched to ${settings.inputId}" }
@@ -228,13 +265,17 @@ class RemoteController(
         log.log { "LG TV did not respond: $lastError" }
     }
 
-    /** Pairs with the LG TV: the TV shows a prompt, the key it returns is stored. Also learns its MAC. */
+    /**
+     * Pairs with the LG TV: the TV shows a prompt, the key it returns is stored together with the
+     * TV's certificate, which later connections insist on. Also learns its MAC.
+     */
     suspend fun pairLgTv(host: String, onPrompt: () -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            LgTvClient(host, log).use { client ->
+            LgTvClient(host, log, pinnedCertificate = null, socketFactory = networkTargets.lanSocketFactory()).use { client ->
                 val key = client.connect(null, onPrompt)
                 lgTvRepository.setHost(host)
                 lgTvRepository.setClientKey(key)
+                lgTvRepository.setCertificate(client.certificate)
                 client.macAddresses().takeIf { it.isNotEmpty() }?.let { lgTvRepository.setMacAddress(it.joinToString(",")) }
             }
             Unit
@@ -246,20 +287,27 @@ class RemoteController(
         runCatching {
             val settings = lgTvRepository.settings.first()
             if (!settings.enabled || settings.host.isBlank()) throw IllegalStateException("LG TV not configured")
-            LgTvClient(settings.host, log).use { client ->
-                client.connect(settings.clientKey, timeoutMs = 15_000)
+            lgTvClient(settings).use { client ->
+                client.register(settings)
                 client.turnOff()
             }
         }
+    }
+
+    private fun lgTvClient(settings: LgTvSettings) =
+        LgTvClient(settings.host, log, pinnedCertificate = settings.certificate, socketFactory = networkTargets.lanSocketFactory())
+
+    /** Registers with the stored key; a TV paired before certificates were recorded gets its key pinned on this first use. */
+    private suspend fun LgTvClient.register(settings: LgTvSettings) {
+        connect(settings.clientKey, timeoutMs = 15_000)
+        if (settings.certificate == null) certificate?.let { lgTvRepository.setCertificate(it) }
     }
 
     /** While the TV is awake its AirPlay record carries the MAC address; grab it once so wake-up works later. */
     private fun learnMacAddress(device: PairedDevice) {
         if (macLearning?.isActive == true) return
         macLearning = scope.launch {
-            val mac = withTimeoutOrNull(MAC_LEARN_TIMEOUT_MS) {
-                discovery.devices().mapNotNull { list -> list.firstOrNull { it.serviceName == device.name }?.macAddress }.first()
-            }
+            val mac = discover(MAC_LEARN_TIMEOUT_MS) { list -> list.firstOrNull { it.serviceName == device.name }?.macAddress }
             if (mac != null) {
                 log.log { "learned MAC address for ${device.name}" }
                 deviceRepository.setMacAddress(mac)
@@ -362,15 +410,16 @@ class RemoteController(
             displayName = clientName,
         )
         val connection = CompanionConnection(connector, device.host, device.port, log)
-        connection.open()
-        val session = PairingSession(connection, identity, SecureRandomSource)
         try {
+            connection.open()
+            val session = PairingSession(connection, identity, SecureRandomSource)
             session.start()
-        } catch (e: Exception) {
-            connection.close()
+            pairing = PendingPairing(device, identity, connection, session)
+        } catch (e: Throwable) {
+            // Also on cancellation: nothing else holds this connection yet.
+            withContext(NonCancellable) { connection.close() }
             throw e
         }
-        pairing = PendingPairing(device, identity, connection, session)
     }
 
     /** Completes pairing with the PIN; on a wrong PIN the TV is asked for a fresh PIN so the user can retry. */
@@ -406,6 +455,8 @@ class RemoteController(
     private fun enqueue(command: suspend CompanionClient.() -> Unit) {
         commands.trySend(command)
     }
+
+    private suspend fun requireClient(): CompanionClient = currentClient() ?: throw CompanionException.ConnectionClosed(null)
 
     private suspend fun currentClient(): CompanionClient? = clientMutex.withLock {
         val device = _state.value.device ?: deviceRepository.device.first() ?: return null

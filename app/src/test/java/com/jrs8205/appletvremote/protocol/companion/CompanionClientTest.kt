@@ -9,9 +9,12 @@ import com.jrs8205.appletvremote.protocol.pairing.PairSetup
 import com.jrs8205.appletvremote.protocol.pairing.PairingException
 import com.jrs8205.appletvremote.protocol.textinput.KeyedArchive
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -201,6 +204,21 @@ class CompanionClientTest {
         assertEquals((tv.remoteSid shl 32) or localSid, stop["_sid"])
         tv.awaitMessage("_tiStop")
         assertEquals(0, tv.messages.count { it.name == "_touchStop" })
+    }
+
+    @Test
+    fun cancelledDisconnectStillClosesTheSocket() = test {
+        tv.responder = { name, _ -> if (name == "_sessionStop") null else tv.defaultReply(name) }
+        val client = client()
+        client.ensureConnected()
+        val teardown = launch(Dispatchers.Default) { client.disconnect() }
+        tv.awaitMessage("_sessionStop")
+        teardown.cancelAndJoin()
+        assertEquals(ConnectionState.Disconnected, client.state.value)
+        while (tv.closedConnectionCount < 1) delay(5)
+        client.ensureConnected()
+        assertEquals(2, tv.connectionCount)
+        client.disconnect()
     }
 
     @Test

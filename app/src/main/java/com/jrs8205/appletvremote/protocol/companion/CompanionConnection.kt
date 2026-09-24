@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
@@ -75,7 +76,10 @@ class CompanionConnection(
     suspend fun open() {
         check(socket == null) { "connection already opened" }
         val connected = try {
-            withContext(ioDispatcher) { connector.connect(host, port, connectTimeoutMs) }
+            withContext(ioDispatcher) {
+                // A cancelled caller never sees the socket, so it would leak without this.
+                connector.connect(host, port, connectTimeoutMs).also { if (!isActive) it.close() }
+            }
         } catch (e: IOException) {
             shutdown(e)
             throw CompanionException.ConnectionClosed(e)
@@ -171,6 +175,9 @@ class CompanionConnection(
         } catch (e: AuthenticationFailedException) {
             failure = e
         } catch (e: FrameException) {
+            failure = e
+        } catch (e: RuntimeException) {
+            // A malformed frame must end this connection, never the process.
             failure = e
         } finally {
             shutdown(failure)

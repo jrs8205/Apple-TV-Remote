@@ -24,10 +24,15 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.jrs8205.appletvremote.R
 import com.jrs8205.appletvremote.data.NavigationMode
 import com.jrs8205.appletvremote.protocol.companion.HidButton
 import com.jrs8205.appletvremote.protocol.companion.TouchPhase
@@ -60,12 +65,24 @@ fun ClickPad(
     val current by rememberUpdatedState(actions)
     val padColor = if (isSystemInDarkTheme()) RemoteColors.PadDark else RemoteColors.PadLight
     val tick: () -> Unit = { if (haptics) haptic.performHapticFeedback(HapticFeedbackType.ContextClick) }
+    // Screen readers cannot swipe or drag on the pad, so every direction is offered as a named action.
+    val selectLabel = stringResource(R.string.remote_select)
+    val directions = listOf(
+        stringResource(R.string.cd_up) to HidButton.UP,
+        stringResource(R.string.cd_down) to HidButton.DOWN,
+        stringResource(R.string.cd_left) to HidButton.LEFT,
+        stringResource(R.string.cd_right) to HidButton.RIGHT,
+    )
 
     Box(
         modifier = modifier
             .size(size)
             .background(padColor, CircleShape)
-            .semantics { this.contentDescription = contentDescription }
+            .semantics {
+                this.contentDescription = contentDescription
+                onClick(selectLabel) { current.click(HidButton.SELECT); true }
+                customActions = directions.map { (label, button) -> CustomAccessibilityAction(label) { current.click(button); true } }
+            }
             .pointerInput(mode, haptics) {
                 val tapSlopPx = with(density) { TAP_SLOP_DP.dp.toPx() }
                 val swipeStepPx = with(density) { SWIPE_STEP_DP.dp.toPx() }
@@ -80,46 +97,56 @@ fun ClickPad(
                     var accY = 0f
                     var padX = 0.5f
                     var padY = 0.5f
-                    if (mode == NavigationMode.TOUCHPAD) current.touch(TouchPhase.PRESS, 500, 500)
+                    var touching = false
+                    if (mode == NavigationMode.TOUCHPAD) {
+                        current.touch(TouchPhase.PRESS, 500, 500)
+                        touching = true
+                    }
                     var released = false
-                    while (!released) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        val delta = change.position - last
-                        last = change.position
-                        travelled += abs(delta.x) + abs(delta.y)
-                        when (mode) {
-                            NavigationMode.TOUCHPAD -> {
-                                padX = (padX + delta.x / trackpadScalePx).coerceIn(0f, 1f)
-                                padY = (padY + delta.y / trackpadScalePx).coerceIn(0f, 1f)
-                                if (change.pressed) {
-                                    current.touch(TouchPhase.HOLD, (padX * 1000).roundToInt(), (padY * 1000).roundToInt())
-                                }
-                            }
-                            NavigationMode.SWIPE -> {
-                                accX += delta.x
-                                accY += delta.y
-                                while (abs(accX) >= swipeStepPx || abs(accY) >= swipeStepPx) {
-                                    if (abs(accX) >= abs(accY)) {
-                                        tick()
-                                        current.click(if (accX > 0) HidButton.RIGHT else HidButton.LEFT)
-                                        accX -= swipeStepPx * if (accX > 0) 1 else -1
-                                        accY = 0f
-                                    } else {
-                                        tick()
-                                        current.click(if (accY > 0) HidButton.DOWN else HidButton.UP)
-                                        accY -= swipeStepPx * if (accY > 0) 1 else -1
-                                        accX = 0f
+                    try {
+                        while (!released) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val delta = change.position - last
+                            last = change.position
+                            travelled += abs(delta.x) + abs(delta.y)
+                            when (mode) {
+                                NavigationMode.TOUCHPAD -> {
+                                    padX = (padX + delta.x / trackpadScalePx).coerceIn(0f, 1f)
+                                    padY = (padY + delta.y / trackpadScalePx).coerceIn(0f, 1f)
+                                    if (change.pressed) {
+                                        current.touch(TouchPhase.HOLD, (padX * 1000).roundToInt(), (padY * 1000).roundToInt())
                                     }
                                 }
+                                NavigationMode.SWIPE -> {
+                                    accX += delta.x
+                                    accY += delta.y
+                                    while (abs(accX) >= swipeStepPx || abs(accY) >= swipeStepPx) {
+                                        if (abs(accX) >= abs(accY)) {
+                                            tick()
+                                            current.click(if (accX > 0) HidButton.RIGHT else HidButton.LEFT)
+                                            accX -= swipeStepPx * if (accX > 0) 1 else -1
+                                            accY = 0f
+                                        } else {
+                                            tick()
+                                            current.click(if (accY > 0) HidButton.DOWN else HidButton.UP)
+                                            accY -= swipeStepPx * if (accY > 0) 1 else -1
+                                            accX = 0f
+                                        }
+                                    }
+                                }
+                                NavigationMode.DPAD -> Unit
                             }
-                            NavigationMode.DPAD -> Unit
+                            change.consume()
+                            if (!change.pressed) released = true
                         }
-                        change.consume()
-                        if (!change.pressed) released = true
-                    }
-                    if (mode == NavigationMode.TOUCHPAD) {
-                        current.touch(TouchPhase.RELEASE, (padX * 1000).roundToInt(), (padY * 1000).roundToInt())
+                        if (touching) {
+                            touching = false
+                            current.touch(TouchPhase.RELEASE, (padX * 1000).roundToInt(), (padY * 1000).roundToInt())
+                        }
+                    } finally {
+                        // The gesture was cancelled (screen left, mode changed): the TV must not be left with a finger down.
+                        if (touching) current.touch(TouchPhase.RELEASE, (padX * 1000).roundToInt(), (padY * 1000).roundToInt())
                     }
                     if (travelled <= tapSlopPx) {
                         tick()

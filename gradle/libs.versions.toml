@@ -38,6 +38,8 @@ bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", versi
 dd-plist = { group = "com.googlecode.plist", name = "dd-plist", version.ref = "ddPlist" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-tls = { group = "com.squareup.okhttp3", name = "okhttp-tls", version.ref = "okhttp" }
+mockwebserver3 = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 

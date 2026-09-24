@@ -34,6 +34,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -67,7 +69,13 @@ fun RemoteButton(
             .size(size)
             .graphicsLayer { val s = if (pressed) 0.92f else 1f; scaleX = s; scaleY = s }
             .background(buttonColor(), CircleShape)
-            .semantics { this.contentDescription = contentDescription; role = Role.Button }
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+                // The gestures below never reach a screen reader; these actions do.
+                onClick { tap(); true }
+                longPress?.let { handler -> onLongClick { handler(); true } }
+            }
             .pointerInput(haptics) {
                 detectTapGestures(
                     onPress = {
@@ -164,7 +172,11 @@ private fun RockerHalf(
     val step by rememberUpdatedState(onStep)
     Box(
         modifier = modifier
-            .semantics { contentDescription = description; role = Role.Button }
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+                onClick { step(); true }
+            }
             .pointerInput(haptics) {
                 detectTapGestures(
                     onPress = {

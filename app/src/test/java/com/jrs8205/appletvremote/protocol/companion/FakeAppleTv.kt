@@ -26,6 +26,8 @@ class FakeAppleTv(val accessory: FakeAccessory = FakeAccessory(), listenPort: In
     val messages: List<Recorded> get() = recorded.filter { it.frameType == FrameType.E_OPACK }
     @Volatile var connectionCount = 0
         private set
+    @Volatile var closedConnectionCount = 0
+        private set
 
     /** Returns the `_c` content to reply with, or null to leave the request unanswered. */
     @Volatile var responder: (name: String, content: Map<*, *>) -> Map<String, Any?>? = { name, _ -> defaultReply(name) }
@@ -94,6 +96,7 @@ class FakeAppleTv(val accessory: FakeAccessory = FakeAccessory(), listenPort: In
             } catch (_: IOException) {
             } finally {
                 socket.close()
+                closedConnectionCount++
             }
         }
 

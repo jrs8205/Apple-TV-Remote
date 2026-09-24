@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -23,12 +24,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
  * Shows the Apple TV's playback in the notification shade and on the lock screen. The session's
  * player is [CompanionPlayer]; skip buttons come and go with what the TV allows.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class RemoteMediaService : MediaSessionService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -46,10 +49,12 @@ class RemoteMediaService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        // The service is started with a plain intent, so nothing else would register the session with it.
         session = MediaSession.Builder(this, companionPlayer)
             .setSessionActivity(launch)
             .setCallback(SkipCallback())
             .build()
+            .also(::addSession)
         scope.launch {
             combine(container.remoteController.state, container.settingsRepository.settings) { state, settings -> state to settings }
                 .collect { (state, settings) ->
@@ -118,10 +123,10 @@ class RemoteMediaService : MediaSessionService() {
         ): ListenableFuture<SessionResult> {
             val container = appContainer
             scope.launch {
-                val settings = container.settingsRepository.settings
+                val settings = container.settingsRepository.settings.first()
                 when (customCommand.customAction) {
-                    COMMAND_SKIP_BACK -> settings.collect { container.remoteController.skip(-it.skipBackwardSeconds.toDouble()); return@collect }
-                    COMMAND_SKIP_FORWARD -> settings.collect { container.remoteController.skip(it.skipForwardSeconds.toDouble()); return@collect }
+                    COMMAND_SKIP_BACK -> container.remoteController.skip(-settings.skipBackwardSeconds.toDouble())
+                    COMMAND_SKIP_FORWARD -> container.remoteController.skip(settings.skipForwardSeconds.toDouble())
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))

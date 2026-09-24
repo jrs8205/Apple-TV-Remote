@@ -44,6 +44,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jrs8205.appletvremote.R
 import com.jrs8205.appletvremote.discovery.DiscoveredDevice
@@ -58,12 +59,22 @@ fun PairingScreen(viewModel: PairingViewModel, onPaired: () -> Unit) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permissionMissing = context.needsLocalNetworkPermission()
     }
+    // Granting the permission on the system settings page returns here without any launcher callback.
+    LifecycleResumeEffect(Unit) {
+        permissionMissing = context.needsLocalNetworkPermission()
+        onPauseOrDispose { }
+    }
 
     DisposableEffect(permissionMissing) {
         if (!permissionMissing) viewModel.startScanning()
         onDispose { viewModel.stopScanning() }
     }
-    LaunchedEffect(state) { if (state is PairingUiState.Done) onPaired() }
+    LaunchedEffect(state) {
+        if (state is PairingUiState.Done) {
+            viewModel.acknowledgeDone()
+            onPaired()
+        }
+    }
 
     Column(
         modifier = Modifier

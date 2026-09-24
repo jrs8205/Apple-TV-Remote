@@ -4,18 +4,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.FastForward
@@ -85,94 +89,99 @@ fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit) {
             IconButton(onClick = { showKeyboard = true }) { Icon(Icons.Default.Keyboard, contentDescription = stringResource(R.string.cd_keyboard)) }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.cd_settings)) }
         }
-        Spacer(Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        // Sits at the bottom when there is room and scrolls when the window is shorter than the remote (landscape, split screen).
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             Column(
                 modifier = Modifier
-                    .widthIn(max = 360.dp)
                     .fillMaxWidth()
-                    .background(bodyColor, RoundedCornerShape(36.dp))
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = 16.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.Bottom,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    RemoteButton(
-                        contentDescription = stringResource(R.string.cd_power),
-                        onTap = viewModel::togglePower,
-                        size = 44.dp,
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 360.dp)
+                        .fillMaxWidth()
+                        .background(bodyColor, RoundedCornerShape(36.dp))
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        RemoteButton(
+                            contentDescription = stringResource(R.string.cd_power),
+                            onTap = viewModel::togglePower,
+                            size = 44.dp,
+                            haptics = haptics,
+                        ) { ButtonIcon(Icons.Default.PowerSettingsNew, size = 22.dp) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    ClickPad(
+                        mode = settings.navigationMode,
+                        actions = padActions,
                         haptics = haptics,
-                    ) { ButtonIcon(Icons.Default.PowerSettingsNew, size = 22.dp) }
-                }
-                Spacer(Modifier.height(8.dp))
-                ClickPad(
-                    mode = settings.navigationMode,
-                    actions = padActions,
-                    haptics = haptics,
-                    contentDescription = stringResource(R.string.cd_click_pad),
-                )
-                Spacer(Modifier.height(20.dp))
-                if (state.media.canSkipBackward || state.media.canSkipForward) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        SkipButton(
-                            enabled = state.media.canSkipBackward,
-                            seconds = settings.skipBackwardSeconds,
-                            forward = false,
+                        contentDescription = stringResource(R.string.cd_click_pad),
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    if (state.media.canSkipBackward || state.media.canSkipForward) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            SkipButton(
+                                enabled = state.media.canSkipBackward,
+                                seconds = settings.skipBackwardSeconds,
+                                forward = false,
+                                haptics = haptics,
+                                onTap = viewModel::skipBackward,
+                            )
+                            SkipButton(
+                                enabled = state.media.canSkipForward,
+                                seconds = settings.skipForwardSeconds,
+                                forward = true,
+                                haptics = haptics,
+                                onTap = viewModel::skipForward,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        RemoteButton(
+                            contentDescription = stringResource(R.string.cd_back),
+                            onTap = { viewModel.press(HidButton.MENU) },
+                            onLongPress = { viewModel.press(HidButton.HOME) },
                             haptics = haptics,
-                            onTap = viewModel::skipBackward,
-                        )
-                        SkipButton(
-                            enabled = state.media.canSkipForward,
-                            seconds = settings.skipForwardSeconds,
-                            forward = true,
+                        ) { ButtonIcon(Icons.Default.ChevronLeft, size = 36.dp) }
+                        RemoteButton(
+                            contentDescription = stringResource(R.string.cd_home),
+                            onTap = { viewModel.press(HidButton.HOME) },
+                            onLongPress = { viewModel.hold(HidButton.HOME, CONTROL_CENTER_HOLD_MS) },
                             haptics = haptics,
-                            onTap = viewModel::skipForward,
-                        )
+                        ) { ButtonIcon(Icons.Default.Tv, size = 28.dp) }
                     }
                     Spacer(Modifier.height(16.dp))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    RemoteButton(
-                        contentDescription = stringResource(R.string.cd_back),
-                        onTap = { viewModel.press(HidButton.MENU) },
-                        onLongPress = { viewModel.press(HidButton.HOME) },
-                        haptics = haptics,
-                    ) { ButtonIcon(Icons.Default.ChevronLeft, size = 36.dp) }
-                    RemoteButton(
-                        contentDescription = stringResource(R.string.cd_home),
-                        onTap = { viewModel.press(HidButton.HOME) },
-                        onLongPress = { viewModel.hold(HidButton.HOME, CONTROL_CENTER_HOLD_MS) },
-                        haptics = haptics,
-                    ) { ButtonIcon(Icons.Default.Tv, size = 28.dp) }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        RemoteButton(
-                            contentDescription = stringResource(R.string.cd_play_pause),
-                            onTap = { viewModel.press(HidButton.PLAY_PAUSE) },
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            RemoteButton(
+                                contentDescription = stringResource(R.string.cd_play_pause),
+                                onTap = { viewModel.press(HidButton.PLAY_PAUSE) },
+                                haptics = haptics,
+                            ) { PlayPauseGlyph() }
+                            RemoteButton(
+                                contentDescription = stringResource(R.string.cd_mute),
+                                onTap = { viewModel.press(HidButton.MUTE) },
+                                haptics = haptics,
+                            ) { ButtonIcon(Icons.Default.VolumeOff, size = 28.dp) }
+                        }
+                        VolumeRocker(
+                            onUp = { viewModel.press(HidButton.VOLUME_UP) },
+                            onDown = { viewModel.press(HidButton.VOLUME_DOWN) },
+                            upDescription = stringResource(R.string.cd_volume_up),
+                            downDescription = stringResource(R.string.cd_volume_down),
+                            height = 152.dp,
                             haptics = haptics,
-                        ) { PlayPauseGlyph() }
-                        RemoteButton(
-                            contentDescription = stringResource(R.string.cd_mute),
-                            onTap = { viewModel.press(HidButton.MUTE) },
-                            haptics = haptics,
-                        ) { ButtonIcon(Icons.Default.VolumeOff, size = 28.dp) }
+                        )
                     }
-                    VolumeRocker(
-                        onUp = { viewModel.press(HidButton.VOLUME_UP) },
-                        onDown = { viewModel.press(HidButton.VOLUME_DOWN) },
-                        upDescription = stringResource(R.string.cd_volume_up),
-                        downDescription = stringResource(R.string.cd_volume_down),
-                        height = 152.dp,
-                        haptics = haptics,
-                    )
                 }
             }
         }
