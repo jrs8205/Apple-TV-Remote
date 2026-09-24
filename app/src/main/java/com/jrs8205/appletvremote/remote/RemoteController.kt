@@ -63,6 +63,14 @@ data class RemoteState(
     val lastError: Throwable? = null,
 )
 
+/** One pairing conversation with a TV, from PIN prompt to credentials; opaque outside [RemoteController]. */
+class PairingAttempt internal constructor(
+    internal val device: DiscoveredDevice,
+    internal val identity: ControllerIdentity,
+    internal val connection: CompanionConnection,
+    internal val session: PairingSession,
+)
+
 /**
  * The app's single owner of the Apple TV session. UI actions become ordered commands on one
  * queue; events from the TV fold into [state].
@@ -87,7 +95,7 @@ class RemoteController(
     private var clientDevice: PairedDevice? = null
     private var eventJob: Job? = null
     private var backgroundDisconnect: Job? = null
-    private var pairing: PendingPairing? = null
+    private var pairing: PairingAttempt? = null
 
     private val commands = Channel<suspend CompanionClient.() -> Unit>(Channel.UNLIMITED)
     private val touchRecovery = AtomicBoolean(false)
@@ -109,8 +117,6 @@ class RemoteController(
             throw e
         }
     }
-
-    private class PendingPairing(val device: DiscoveredDevice, val identity: ControllerIdentity, val connection: CompanionConnection, val session: PairingSession)
 
     init {
         scope.launch {
@@ -353,9 +359,12 @@ class RemoteController(
         deviceRepository.forget()
     }
 
-    /** Opens a connection to [device] and asks it to show its PIN. */
-    suspend fun startPairing(device: DiscoveredDevice) {
-        cancelPairing()
+    /** The attempt a PIN would complete right now, if any. */
+    val currentPairing: PairingAttempt? get() = pairing
+
+    /** Opens a connection to [device] and asks it to show its PIN; the returned attempt is what [cancelPairing] needs. */
+    suspend fun startPairing(device: DiscoveredDevice): PairingAttempt {
+        cancelCurrentPairing()
         val identity = ControllerIdentity(
             pairingId = UUID.randomUUID().toString(),
             signingKey = Ed25519KeyPair.generate(SecureRandomSource),
@@ -366,7 +375,7 @@ class RemoteController(
             connection.open()
             val session = PairingSession(connection, identity, SecureRandomSource)
             session.start()
-            pairing = PendingPairing(device, identity, connection, session)
+            return PairingAttempt(device, identity, connection, session).also { pairing = it }
         } catch (e: Throwable) {
             // Also on cancellation: nothing else holds this connection yet.
             withContext(NonCancellable) { connection.close() }
@@ -399,7 +408,12 @@ class RemoteController(
         return device
     }
 
-    suspend fun cancelPairing() {
+    /** Closes [attempt] unless a newer attempt has already replaced it: a late cancellation must not hit that one. */
+    suspend fun cancelPairing(attempt: PairingAttempt) {
+        if (pairing === attempt) cancelCurrentPairing()
+    }
+
+    private suspend fun cancelCurrentPairing() {
         pairing?.connection?.close()
         pairing = null
     }

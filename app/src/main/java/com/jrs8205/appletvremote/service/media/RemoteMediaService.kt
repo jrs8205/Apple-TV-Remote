@@ -60,8 +60,10 @@ class RemoteMediaService : MediaSessionService() {
                 .collect { (state, settings) ->
                     companionPlayer.update(state)
                     session?.setMediaButtonPreferences(skipButtons(state, settings.skipBackwardSeconds, settings.skipForwardSeconds))
-                    val wanted = settings.mediaNotificationEnabled && state.connection == ConnectionState.Ready && state.media.playState != PlayState.INACTIVE
-                    if (!wanted) stopSelf()
+                    // Stays alive while the TV stays connected, so playback that starts while the app is in the
+                    // background gets its notification back; without media the player empties its playlist and
+                    // Media3 withdraws the notification on its own.
+                    if (!settings.mediaNotificationEnabled || state.connection != ConnectionState.Ready) stopSelf()
                 }
         }
     }

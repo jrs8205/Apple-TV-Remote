@@ -61,9 +61,11 @@ class CompanionPlayer(
                     .build(),
             )
             .build()
+        // An empty playlist is what makes Media3 take the notification down while nothing is playing.
+        val playlist = if (hasPlayback) listOf(MediaItemData.Builder("apple-tv").setMediaItem(item).setIsSeekable(false).build()) else emptyList()
         return State.Builder()
             .setAvailableCommands(commands)
-            .setPlaylist(listOf(MediaItemData.Builder("apple-tv").setMediaItem(item).setIsSeekable(false).build()))
+            .setPlaylist(playlist)
             .setPlaybackState(if (hasPlayback) Player.STATE_READY else Player.STATE_IDLE)
             .setPlayWhenReady(media.playState == PlayState.PLAYING, Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
             .setDeviceInfo(DeviceInfo.Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE).setMinVolume(0).setMaxVolume(VOLUME_STEPS).build())
