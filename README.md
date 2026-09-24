@@ -11,7 +11,20 @@ network using the Companion Link protocol, so no account, cloud service or extra
 - Play/pause, skip, volume, mute, back, home and power
 - Text entry when the Apple TV shows a keyboard
 - Playback controls in the notification shade and a Quick Settings tile
+- Wakes an Apple TV that hangs off an LG webOS TV: the LG TV is switched on over the network and
+  set to the Apple TV's HDMI input, and HDMI-CEC wakes the Apple TV
+- Reconnects on its own when the Apple TV changes its address or port
 - English and Finnish
+
+## Waking the Apple TV
+
+An Apple TV in deep sleep does not answer on the network and ignores Wake-on-LAN packets, so the
+app wakes it through the television instead. In Settings, LG TV, enter the TV's IP address and
+pair with it (the TV asks for confirmation on screen), then choose the HDMI input the Apple TV is
+connected to. The TV must have "Turn on via Wi-Fi" (or mobile) and SIMPLINK (HDMI-CEC) enabled.
+After that the power button on the remote turns the TV on, switches the input and connects.
+
+The TV's certificate is pinned on pairing; if the TV ever presents a different one, pair again.
 
 ## Building
 
@@ -21,11 +34,15 @@ Open the project in Android Studio or run:
 gradlew.bat assembleDebug
 ```
 
-Unit tests run once with:
+Unit tests and lint run once with:
 
 ```
-gradlew.bat :app:testDebugUnitTest --console=plain
+gradlew.bat :app:testDebugUnitTest :app:lintDebug --console=plain
 ```
+
+A signed release needs a `keystore.properties` file at the project root with `storeFile`,
+`storePassword`, `keyAlias` and `keyPassword`; without it `assembleRelease` produces an unsigned
+APK. Neither the properties file nor the keystore belongs in version control.
 
 Requires Android 14 (API 34) or newer. On Android 17 the app asks for local network access,
 which it needs to discover and reach the Apple TV.
