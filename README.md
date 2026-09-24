@@ -6,6 +6,10 @@
 An open Android remote control for Apple TV. It talks to the Apple TV directly over the local
 network using the Companion Link protocol, so no account, cloud service or extra hardware is needed.
 
+**One button from a dark living room to the Apple TV home screen.** With an LG webOS TV the power
+button switches the television on over Wi-Fi, selects the Apple TV's HDMI input and wakes the
+Apple TV, even from deep sleep. No TV remote, no input menu.
+
 ## Features
 
 - Finds Apple TVs on the local network and pairs with the PIN shown on the TV
@@ -14,12 +18,13 @@ network using the Companion Link protocol, so no account, cloud service or extra
 - Play/pause, skip, volume, mute, back, home and power
 - Text entry when the Apple TV shows a keyboard
 - Playback controls in the notification shade and a Quick Settings tile
-- Wakes an Apple TV that hangs off an LG webOS TV: the LG TV is switched on over the network and
-  set to the Apple TV's HDMI input, and HDMI-CEC wakes the Apple TV
+- LG webOS TV integration: one tap turns the LG TV on over the network, switches it to the Apple
+  TV's HDMI input and wakes the Apple TV through HDMI-CEC
+- Pairs with the LG TV once; the TV's Wake-on-LAN address is learned automatically
 - Reconnects on its own when the Apple TV changes its address or port
 - English and Finnish
 
-## Waking the Apple TV
+## LG TV integration
 
 An Apple TV in deep sleep does not answer on the network and ignores Wake-on-LAN packets, so the
 app wakes it through the television instead. In Settings, LG TV, enter the TV's IP address and
