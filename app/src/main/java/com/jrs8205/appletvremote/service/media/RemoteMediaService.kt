@@ -1,11 +1,13 @@
 package com.jrs8205.appletvremote.service.media
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -16,7 +18,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.jrs8205.appletvremote.MainActivity
 import com.jrs8205.appletvremote.R
 import com.jrs8205.appletvremote.appContainer
-import com.jrs8205.appletvremote.protocol.companion.ConnectionState
 import com.jrs8205.appletvremote.protocol.companion.PlayState
 import com.jrs8205.appletvremote.remote.RemoteState
 import kotlinx.coroutines.CoroutineScope
@@ -60,10 +61,10 @@ class RemoteMediaService : MediaSessionService() {
                 .collect { (state, settings) ->
                     companionPlayer.update(state)
                     session?.setMediaButtonPreferences(skipButtons(state, settings.skipBackwardSeconds, settings.skipForwardSeconds))
-                    // Stays alive while the TV stays connected, so playback that starts while the app is in the
-                    // background gets its notification back; without media the player empties its playlist and
-                    // Media3 withdraws the notification on its own.
-                    if (!settings.mediaNotificationEnabled || state.connection != ConnectionState.Ready) stopSelf()
+                    // Lives only while the TV plays or pauses over a live connection: Android stops an idle service
+                    // in the background anyway, so playback that starts while the app is hidden gets its notification
+                    // back once the app is visible again. The emptied playlist makes Media3 withdraw the notification.
+                    if (!settings.mediaNotificationEnabled || !companionPlayer.hasPlayback) stopSelf()
                 }
         }
     }
@@ -71,17 +72,25 @@ class RemoteMediaService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        // The process may be killed as soon as this returns, so the notification goes now rather than in onDestroy.
+        releaseSession()
         stopSelf()
     }
 
     override fun onDestroy() {
-        scope.cancel()
-        session?.run {
-            player.release()
-            release()
-        }
-        session = null
+        releaseSession()
         super.onDestroy()
+    }
+
+    private fun releaseSession() {
+        scope.cancel()
+        val current = session ?: return
+        session = null
+        removeSession(current)
+        current.player.release()
+        current.release()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java)?.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
     }
 
     private fun statusText(state: RemoteState): String = getString(

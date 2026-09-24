@@ -8,10 +8,13 @@ import android.os.Build
 import android.content.Intent
 import com.jrs8205.appletvremote.protocol.companion.ConnectionState
 import com.jrs8205.appletvremote.protocol.companion.PlayState
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.DefaultMediaNotificationProvider
 import com.jrs8205.appletvremote.service.media.RemoteMediaService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.annotation.OptIn
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -61,10 +64,11 @@ class RemoteApp : Application() {
 
     private val foreground = MutableStateFlow(false)
 
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
-        // Swiping the app away kills the process before the media service can withdraw its notification.
-        getSystemService(NotificationManager::class.java)?.cancelAll()
+        // A process killed while the media notification was detached (paused TV) leaves it behind; it is stale by now.
+        getSystemService(NotificationManager::class.java)?.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
         container = AppContainer(this)
         container.appScope.launch {
             combine(container.remoteController.state, container.settingsRepository.settings, foreground) { state, settings, visible ->

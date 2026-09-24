@@ -71,15 +71,30 @@ class PairingViewModel(private val container: AppContainer) : ViewModel() {
 
     fun submitPin(pin: String) {
         val current = _state.value as? PairingUiState.EnterPin ?: return
+        val own = attempt ?: run {
+            _state.value = PairingUiState.Failed(current.device, PairingError.CONNECT_FAILED)
+            return
+        }
         _state.value = PairingUiState.Verifying(current.device)
-        viewModelScope.launch {
+        pairingJob = viewModelScope.launch {
+            // The attempt is spent by finishPairing either way; only a fresh one below is worth cancelling later.
+            attempt = null
             try {
-                container.remoteController.finishPairing(pin)
+                container.remoteController.finishPairing(own, pin)
                 _state.value = PairingUiState.Done
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: PairingException.WrongPin) {
-                // The controller asked the TV for a fresh PIN; that new attempt is now ours to cancel.
-                attempt = container.remoteController.currentPairing
-                _state.value = PairingUiState.EnterPin(current.device, PairingError.WRONG_PIN)
+                // The TV drops its pair-setup after a wrong PIN, so it is asked for a fresh PIN before the retry.
+                try {
+                    attempt = container.remoteController.startPairing(current.device)
+                    _state.value = PairingUiState.EnterPin(current.device, PairingError.WRONG_PIN)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    container.connectionLog.log { "pairing restart failed: $e" }
+                    _state.value = PairingUiState.Failed(current.device, e.toPairingError())
+                }
             } catch (e: Exception) {
                 container.connectionLog.log { "pairing failed: $e" }
                 _state.value = PairingUiState.Failed(current.device, e.toPairingError())
@@ -114,8 +129,8 @@ class PairingViewModel(private val container: AppContainer) : ViewModel() {
     /**
      * Stops an in-flight pairing and closes its connection. The cleanup runs in the application
      * scope because [viewModelScope] is already cancelled by the time [onCleared] runs, and it
-     * waits for the pairing job so a late result cannot outlive the cancellation. Only this view
-     * model's own attempt is cancelled: a newer one started elsewhere must survive.
+     * waits for the pairing job (the PIN request or the PIN submit) so a late result cannot outlive the
+     * cancellation. Only this view model's own attempt is cancelled: a newer one started elsewhere must survive.
      */
     private fun abandonPairing(): Job {
         val job = pairingJob

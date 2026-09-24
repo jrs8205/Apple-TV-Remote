@@ -95,7 +95,7 @@ class RemoteController(
     private var clientDevice: PairedDevice? = null
     private var eventJob: Job? = null
     private var backgroundDisconnect: Job? = null
-    private var pairing: PairingAttempt? = null
+    @Volatile private var pairing: PairingAttempt? = null
 
     private val commands = Channel<suspend CompanionClient.() -> Unit>(Channel.UNLIMITED)
     private val touchRecovery = AtomicBoolean(false)
@@ -359,10 +359,7 @@ class RemoteController(
         deviceRepository.forget()
     }
 
-    /** The attempt a PIN would complete right now, if any. */
-    val currentPairing: PairingAttempt? get() = pairing
-
-    /** Opens a connection to [device] and asks it to show its PIN; the returned attempt is what [cancelPairing] needs. */
+    /** Opens a connection to [device] and asks it to show its PIN; [finishPairing] and [cancelPairing] take the returned attempt. */
     suspend fun startPairing(device: DiscoveredDevice): PairingAttempt {
         cancelCurrentPairing()
         val identity = ControllerIdentity(
@@ -383,24 +380,17 @@ class RemoteController(
         }
     }
 
-    /** Completes pairing with the PIN; on a wrong PIN the TV is asked for a fresh PIN so the user can retry. */
-    suspend fun finishPairing(pin: String): PairedDevice {
-        val pending = checkNotNull(pairing) { "startPairing must run first" }
+    /**
+     * Completes [attempt] with the PIN. The attempt is spent either way: the TV drops its pair-setup after
+     * a wrong PIN, so a retry needs a fresh [startPairing].
+     */
+    suspend fun finishPairing(attempt: PairingAttempt, pin: String): PairedDevice {
         val credentials: Credentials = try {
-            pending.session.finish(pin)
-        } catch (e: PairingException.WrongPin) {
-            pending.connection.close()
-            pairing = null
-            runCatching { startPairing(pending.device) }
-            throw e
-        } catch (e: Exception) {
-            pending.connection.close()
-            pairing = null
-            throw e
+            attempt.session.finish(pin)
+        } finally {
+            withContext(NonCancellable) { release(attempt) }
         }
-        pending.connection.close()
-        pairing = null
-        val device = PairedDevice(pending.device.serviceName, pending.device.host, pending.device.port, credentials)
+        val device = PairedDevice(attempt.device.serviceName, attempt.device.host, attempt.device.port, credentials)
         dropClient()
         deviceRepository.save(device)
         _state.update { it.copy(device = device) }
@@ -408,14 +398,16 @@ class RemoteController(
         return device
     }
 
-    /** Closes [attempt] unless a newer attempt has already replaced it: a late cancellation must not hit that one. */
-    suspend fun cancelPairing(attempt: PairingAttempt) {
-        if (pairing === attempt) cancelCurrentPairing()
-    }
+    /** Closes [attempt]; a newer attempt that has already replaced it is left alone. */
+    suspend fun cancelPairing(attempt: PairingAttempt) = release(attempt)
 
     private suspend fun cancelCurrentPairing() {
-        pairing?.connection?.close()
-        pairing = null
+        pairing?.let { release(it) }
+    }
+
+    private suspend fun release(attempt: PairingAttempt) {
+        attempt.connection.close()
+        if (pairing === attempt) pairing = null
     }
 
     private fun enqueue(command: suspend CompanionClient.() -> Unit) {
@@ -446,7 +438,11 @@ class RemoteController(
             created.events.collect { event ->
                 when (event) {
                     is CompanionEvent.SystemStatusChanged -> _state.update { it.copy(systemStatus = event.status) }
-                    is CompanionEvent.MediaCapabilitiesChanged -> _state.update { it.copy(media = event.capabilities) }
+                    is CompanionEvent.MediaCapabilitiesChanged -> {
+                        val media = event.capabilities
+                        if (media != _state.value.media) log.log { "media flags 0x${media.flags.toString(16)}: ${media.playState}" }
+                        _state.update { it.copy(media = media) }
+                    }
                     is CompanionEvent.TextInputStarted -> _state.update { it.copy(keyboard = event.state ?: TextInputState(null, null, null)) }
                     CompanionEvent.TextInputStopped -> _state.update { it.copy(keyboard = null) }
                     else -> Unit

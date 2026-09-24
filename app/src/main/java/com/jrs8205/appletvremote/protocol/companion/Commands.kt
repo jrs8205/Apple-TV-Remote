@@ -61,10 +61,11 @@ data class MediaCapabilities(val flags: Long) {
     private val play get() = flags and 0x1L != 0L
     private val pause get() = flags and 0x2L != 0L
 
+    // Being able to pause is what shows playback: some tvOS apps offer play and pause together while playing.
     val playState: PlayState
         get() = when {
-            pause && !play -> PlayState.PLAYING
-            play && !pause -> PlayState.PAUSED
+            pause -> PlayState.PLAYING
+            play -> PlayState.PAUSED
             flags and RELEVANT_BITS == 0L -> PlayState.INACTIVE
             else -> PlayState.UNKNOWN
         }

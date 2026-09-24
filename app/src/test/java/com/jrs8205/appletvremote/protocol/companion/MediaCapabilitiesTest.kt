@@ -25,8 +25,15 @@ class MediaCapabilitiesTest {
     }
 
     @Test
-    fun bothPlayAndPauseBitsAreUnknown() {
-        assertEquals(PlayState.UNKNOWN, MediaCapabilities(0x3).playState)
+    fun pauseBitMeansPlayingEvenWhenPlayIsOfferedToo() {
+        // Some tvOS apps advertise both commands while playing; being able to pause is what shows playback.
+        assertEquals(PlayState.PLAYING, MediaCapabilities(0x3).playState)
+        assertEquals(PlayState.PLAYING, MediaCapabilities(0x3 or 0x200 or 0x400).playState)
+    }
+
+    @Test
+    fun transportBitsWithoutPlayOrPauseAreUnknown() {
+        assertEquals(PlayState.UNKNOWN, MediaCapabilities(0x4 or 0x8).playState)
     }
 
     @Test

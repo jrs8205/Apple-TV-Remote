@@ -1,5 +1,9 @@
 package com.jrs8205.appletvremote.lgtv
 
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
@@ -11,6 +15,7 @@ import okhttp3.tls.HeldCertificate
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -51,9 +56,16 @@ class LgTvClientTest {
 
     /**
      * A TV that pairs on request and answers switchInput; [delayMs] holds every reply back.
-     * It reports a wired and a Wi-Fi adapter; [connectedAdapter] is the one getStatus calls connected.
+     * It reports a wired and a Wi-Fi adapter (only Wi-Fi without [wired]); [connectedAdapter] is the one
+     * getStatus calls connected, and with [statesInInfo] getinfo already carries those states itself.
      */
-    private fun serveTv(delayMs: Long = 0, prompt: Boolean = false, connectedAdapter: String? = "wifi") {
+    private fun serveTv(
+        delayMs: Long = 0,
+        prompt: Boolean = false,
+        connectedAdapter: String? = "wifi",
+        wired: Boolean = true,
+        statesInInfo: Boolean = false,
+    ) {
         val closed = CountDownLatch(1)
         serverSideClosed = closed
         server.enqueue(
@@ -81,8 +93,12 @@ class LgTvClientTest {
                             val payload = when (message.getString("uri")) {
                                 "ssap://com.webos.service.connectionmanager/getinfo" -> JSONObject()
                                     .put("returnValue", true)
-                                    .put("wiredInfo", JSONObject().put("macAddress", "11:22:33:44:55:66"))
-                                    .put("wifiInfo", JSONObject().put("macAddress", "aa:bb:cc:dd:ee:ff"))
+                                    .apply {
+                                        fun adapter(mac: String, name: String) = JSONObject().put("macAddress", mac)
+                                            .apply { if (statesInInfo) put("state", if (connectedAdapter == name) "connected" else "disconnected") }
+                                        if (wired) put("wiredInfo", adapter("11:22:33:44:55:66", "wired"))
+                                        put("wifiInfo", adapter("aa:bb:cc:dd:ee:ff", "wifi"))
+                                    }
                                 "ssap://com.webos.service.connectionmanager/getStatus" -> JSONObject()
                                     .put("returnValue", connectedAdapter != null)
                                     .put("wired", JSONObject().put("state", if (connectedAdapter == "wired") "connected" else "disconnected"))
@@ -131,6 +147,44 @@ class LgTvClientTest {
         client().use { client ->
             client.connect(null)
             assertEquals(listOf("11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"), client.macAddresses())
+        }
+    }
+
+    @Test
+    fun doesNotAskForStatusWhenGetinfoAlreadySaysWhichAdapterIsConnected() = test {
+        serveTv(connectedAdapter = "wired", statesInInfo = true)
+        client().use { client ->
+            client.connect(null)
+            assertEquals(listOf("11:22:33:44:55:66"), client.macAddresses())
+        }
+        assertEquals(emptyList<String>(), received.map { it.optString("uri") }.filter { it.endsWith("getStatus") })
+    }
+
+    @Test
+    fun doesNotAskForStatusWhenOnlyOneAdapterHasAMacAddress() = test {
+        serveTv(connectedAdapter = null, wired = false)
+        client().use { client ->
+            client.connect(null)
+            assertEquals(listOf("aa:bb:cc:dd:ee:ff"), client.macAddresses())
+        }
+        assertEquals(emptyList<String>(), received.map { it.optString("uri") }.filter { it.endsWith("getStatus") })
+    }
+
+    @Test
+    fun aCancelledLookupStopsInsteadOfReturningAnEmptyList() = test {
+        serveTv(delayMs = 600)
+        client().use { client ->
+            client.connect(null)
+            var finished = false
+            coroutineScope {
+                val lookup = launch {
+                    client.macAddresses()
+                    finished = true
+                }
+                delay(150)
+                lookup.cancelAndJoin()
+            }
+            assertFalse("macAddresses returned after being cancelled", finished)
         }
     }
 

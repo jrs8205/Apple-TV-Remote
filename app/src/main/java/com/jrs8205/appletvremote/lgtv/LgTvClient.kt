@@ -1,6 +1,7 @@
 package com.jrs8205.appletvremote.lgtv
 
 import com.jrs8205.appletvremote.protocol.log.ProtocolLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
@@ -82,16 +83,33 @@ class LgTvClient(
      * must target. When the TV does not say which adapter is in use, every address it reports.
      */
     suspend fun macAddresses(): List<String> {
-        val info = runCatching { request("ssap://com.webos.service.connectionmanager/getinfo") }.getOrNull() ?: return emptyList()
-        val status = runCatching { request("ssap://com.webos.service.connectionmanager/getStatus") }.getOrNull()
+        val info = answered { request("ssap://com.webos.service.connectionmanager/getinfo") } ?: return emptyList()
         val adapters = listOf("wiredInfo" to "wired", "wifiInfo" to "wifi").mapNotNull { (infoKey, statusKey) ->
             val adapter = info.optJSONObject(infoKey) ?: return@mapNotNull null
             val mac = adapter.optString("macAddress").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            val state = adapter.optString("state").ifEmpty { status?.optJSONObject(statusKey)?.optString("state").orEmpty() }
-            mac to state.equals("connected", ignoreCase = true)
+            Adapter(statusKey, mac, adapter.optString("state"))
         }
-        val connected = adapters.filter { it.second }.map { it.first }
-        return connected.ifEmpty { adapters.map { it.first } }
+        // getStatus is a second round trip, worth it only when getinfo left the choice between adapters open.
+        val status = if (adapters.size > 1 && adapters.any { it.state.isEmpty() }) {
+            answered { request("ssap://com.webos.service.connectionmanager/getStatus") }
+        } else {
+            null
+        }
+        val connected = adapters.filter { adapter ->
+            adapter.state.ifEmpty { status?.optJSONObject(adapter.statusKey)?.optString("state").orEmpty() }.equals("connected", ignoreCase = true)
+        }
+        return connected.ifEmpty { adapters }.map { it.mac }
+    }
+
+    private class Adapter(val statusKey: String, val mac: String, val state: String)
+
+    /** A request the TV fails or does not answer counts as no answer; cancellation is not an answer and passes through. */
+    private inline fun <T> answered(block: () -> T): T? = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     suspend fun request(uri: String, payload: Map<String, Any?> = emptyMap(), timeoutMs: Long = 8_000): JSONObject {
