@@ -49,8 +49,11 @@ class LgTvClientTest {
     private fun client(pinned: String? = null, openTimeoutMs: Long = 4_000, handshakeTimeoutMs: Long = 5_000) =
         LgTvClient(server.hostName, pinnedCertificate = pinned, port = server.port, openTimeoutMs = openTimeoutMs, handshakeTimeoutMs = handshakeTimeoutMs)
 
-    /** A TV that pairs on request and answers switchInput; [delayMs] holds every reply back. */
-    private fun serveTv(delayMs: Long = 0, prompt: Boolean = false) {
+    /**
+     * A TV that pairs on request and answers switchInput; [delayMs] holds every reply back.
+     * It reports a wired and a Wi-Fi adapter; [connectedAdapter] is the one getStatus calls connected.
+     */
+    private fun serveTv(delayMs: Long = 0, prompt: Boolean = false, connectedAdapter: String? = "wifi") {
         val closed = CountDownLatch(1)
         serverSideClosed = closed
         server.enqueue(
@@ -75,7 +78,17 @@ class LgTvClientTest {
                         }
                         "request" -> {
                             val input = message.getJSONObject("payload").optString("inputId")
-                            val payload = if (input == "HDMI_9") JSONObject().put("returnValue", false).put("errorText", "no such input") else JSONObject().put("returnValue", true)
+                            val payload = when (message.getString("uri")) {
+                                "ssap://com.webos.service.connectionmanager/getinfo" -> JSONObject()
+                                    .put("returnValue", true)
+                                    .put("wiredInfo", JSONObject().put("macAddress", "11:22:33:44:55:66"))
+                                    .put("wifiInfo", JSONObject().put("macAddress", "aa:bb:cc:dd:ee:ff"))
+                                "ssap://com.webos.service.connectionmanager/getStatus" -> JSONObject()
+                                    .put("returnValue", connectedAdapter != null)
+                                    .put("wired", JSONObject().put("state", if (connectedAdapter == "wired") "connected" else "disconnected"))
+                                    .put("wifi", JSONObject().put("state", if (connectedAdapter == "wifi") "connected" else "disconnected"))
+                                else -> if (input == "HDMI_9") JSONObject().put("returnValue", false).put("errorText", "no such input") else JSONObject().put("returnValue", true)
+                            }
                             webSocket.send(JSONObject().put("type", "response").put("id", id).put("payload", payload).toString())
                         }
                     }
@@ -101,6 +114,24 @@ class LgTvClientTest {
         val switch = received.first { it.getString("type") == "request" }
         assertEquals("ssap://tv/switchInput", switch.getString("uri"))
         assertEquals("HDMI_2", switch.getJSONObject("payload").getString("inputId"))
+    }
+
+    @Test
+    fun reportsOnlyTheConnectedAdaptersMacAddress() = test {
+        serveTv(connectedAdapter = "wifi")
+        client().use { client ->
+            client.connect(null)
+            assertEquals(listOf("aa:bb:cc:dd:ee:ff"), client.macAddresses())
+        }
+    }
+
+    @Test
+    fun reportsEveryMacAddressWhenTheTvCannotSayWhichIsInUse() = test {
+        serveTv(connectedAdapter = null)
+        client().use { client ->
+            client.connect(null)
+            assertEquals(listOf("11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"), client.macAddresses())
+        }
     }
 
     @Test

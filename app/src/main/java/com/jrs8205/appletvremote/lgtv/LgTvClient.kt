@@ -77,10 +77,21 @@ class LgTvClient(
         request("ssap://system/turnOff")
     }
 
-    /** The TV's own MAC addresses when it reports them; wired first. */
+    /**
+     * The MAC address of the adapter the TV is connected through, which is the one Wake-on-LAN
+     * must target. When the TV does not say which adapter is in use, every address it reports.
+     */
     suspend fun macAddresses(): List<String> {
         val info = runCatching { request("ssap://com.webos.service.connectionmanager/getinfo") }.getOrNull() ?: return emptyList()
-        return listOf("wiredInfo", "wifiInfo").mapNotNull { info.optJSONObject(it)?.optString("macAddress")?.takeIf { m -> m.isNotEmpty() } }
+        val status = runCatching { request("ssap://com.webos.service.connectionmanager/getStatus") }.getOrNull()
+        val adapters = listOf("wiredInfo" to "wired", "wifiInfo" to "wifi").mapNotNull { (infoKey, statusKey) ->
+            val adapter = info.optJSONObject(infoKey) ?: return@mapNotNull null
+            val mac = adapter.optString("macAddress").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val state = adapter.optString("state").ifEmpty { status?.optJSONObject(statusKey)?.optString("state").orEmpty() }
+            mac to state.equals("connected", ignoreCase = true)
+        }
+        val connected = adapters.filter { it.second }.map { it.first }
+        return connected.ifEmpty { adapters.map { it.first } }
     }
 
     suspend fun request(uri: String, payload: Map<String, Any?> = emptyMap(), timeoutMs: Long = 8_000): JSONObject {
