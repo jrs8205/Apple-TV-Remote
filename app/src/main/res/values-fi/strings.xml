@@ -40,6 +40,7 @@
     <string name="state_failed">Yhteys epäonnistui</string>
 
     <string name="remote_select">OK</string>
+    <string name="remote_select_hold">Pidä OK pohjassa</string>
     <string name="cd_back">Takaisin</string>
     <string name="cd_home">TV</string>
     <string name="cd_up">Ylös</string>
@@ -71,11 +72,11 @@
 
     <string name="settings_navigation_mode">Navigointi</string>
     <string name="settings_mode_touchpad">Kosketuslevy</string>
-    <string name="settings_mode_touchpad_hint">Vedä sormella jatkuvasti kuten Siri Remotessa. Napauta valitaksesi.</string>
+    <string name="settings_mode_touchpad_hint">Vedä sormella jatkuvasti kuten Siri Remotessa. Napauta valitaksesi, pidä pohjassa nähdäksesi lisää valintoja.</string>
     <string name="settings_mode_swipe">Pyyhkäisyt</string>
-    <string name="settings_mode_swipe_hint">Jokainen pyyhkäisy siirtää valintaa yhden askeleen. Napauta valitaksesi.</string>
+    <string name="settings_mode_swipe_hint">Jokainen pyyhkäisy siirtää valintaa yhden askeleen. Napauta valitaksesi, pidä pohjassa nähdäksesi lisää valintoja.</string>
     <string name="settings_mode_dpad">Nuolinäppäimet</string>
-    <string name="settings_mode_dpad_hint">Napauta reunoja siirtyäksesi ja keskikohtaa valitaksesi.</string>
+    <string name="settings_mode_dpad_hint">Napauta reunoja siirtyäksesi ja keskikohtaa valitaksesi. Pidä keskikohtaa pohjassa nähdäksesi lisää valintoja.</string>
     <string name="settings_playback">Toisto</string>
     <string name="settings_skip_forward">Siirtymä eteenpäin</string>
     <string name="settings_skip_backward">Siirtymä taaksepäin</string>

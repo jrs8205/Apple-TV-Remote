@@ -65,6 +65,7 @@ fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit) {
     val padActions = remember(viewModel) {
         object : ClickPadActions {
             override fun click(button: HidButton) = viewModel.press(button)
+            override fun hold(button: HidButton) = viewModel.hold(button, BUTTON_HOLD_MS)
             override fun touch(phase: TouchPhase, x: Int, y: Int) = viewModel.touch(phase, x, y)
         }
     }
@@ -155,7 +156,7 @@ fun RemoteScreen(viewModel: RemoteViewModel, onOpenSettings: () -> Unit) {
                         RemoteButton(
                             contentDescription = stringResource(R.string.cd_home),
                             onTap = { viewModel.press(HidButton.HOME) },
-                            onLongPress = { viewModel.hold(HidButton.HOME, CONTROL_CENTER_HOLD_MS) },
+                            onLongPress = { viewModel.hold(HidButton.HOME, BUTTON_HOLD_MS) },
                             haptics = haptics,
                         ) { ButtonIcon(Icons.Default.Tv, size = 28.dp) }
                     }
@@ -220,4 +221,5 @@ fun connectionLabel(state: ConnectionState): String = when (state) {
     is ConnectionState.Failed -> stringResource(R.string.state_failed)
 }
 
-private const val CONTROL_CENTER_HOLD_MS = 1000L
+/** How long a held button stays down: enough for tvOS to open Control Center from the TV button and the app options from OK. */
+private const val BUTTON_HOLD_MS = 1000L

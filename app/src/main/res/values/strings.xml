@@ -40,6 +40,7 @@
     <string name="state_failed">Connection failed</string>
 
     <string name="remote_select">OK</string>
+    <string name="remote_select_hold">Hold OK</string>
     <string name="cd_back">Back</string>
     <string name="cd_home">TV</string>
     <string name="cd_up">Up</string>
@@ -71,11 +72,11 @@
 
     <string name="settings_navigation_mode">Navigation</string>
     <string name="settings_mode_touchpad">Touchpad</string>
-    <string name="settings_mode_touchpad_hint">Drag continuously, like the Siri Remote. Tap to select.</string>
+    <string name="settings_mode_touchpad_hint">Drag continuously, like the Siri Remote. Tap to select, hold for more options.</string>
     <string name="settings_mode_swipe">Directional swipes</string>
-    <string name="settings_mode_swipe_hint">Each swipe moves the selection one step. Tap to select.</string>
+    <string name="settings_mode_swipe_hint">Each swipe moves the selection one step. Tap to select, hold for more options.</string>
     <string name="settings_mode_dpad">D-pad</string>
-    <string name="settings_mode_dpad_hint">Tap the edges to move and the centre to select.</string>
+    <string name="settings_mode_dpad_hint">Tap the edges to move and the centre to select. Hold the centre for more options.</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_skip_forward">Skip forward</string>
     <string name="settings_skip_backward">Skip back</string>

@@ -14,7 +14,8 @@ Apple TV, even from deep sleep. No TV remote, no input menu.
 
 - Finds Apple TVs on the local network and pairs with the PIN shown on the TV
 - Siri Remote style layout with the controls placed near the bottom of the screen
-- Touchpad, directional swipe and d-pad navigation modes
+- Touchpad, directional swipe and d-pad navigation modes; holding the pad opens the app options on the
+  Home Screen for rearranging, foldering and deleting apps
 - Play/pause, skip, volume, mute, back, home and power
 - Text entry when the Apple TV shows a keyboard
 - Playback controls in the notification shade and a Quick Settings tile
